@@ -297,13 +297,13 @@ T_Zombie = "Zombi"
 end
 
 
+-- Start with complete defaults before applying the available translations.
 local GAME_LOCALE = GetLocale()
-if GAME_LOCALE == "enUS" then
-TonguesLocaleEN();
-elseif GAME_LOCALE == "deDE" then
-TonguesLocaleDE()
-elseif GAME_LOCALE == "esES" then
-TonguesLocaleEs()
-else---will add more when i get them!
 TonguesLocaleEN()
+if GAME_LOCALE == "deDE" then
+    TonguesLocaleDE()
+elseif GAME_LOCALE == "frFR" then
+    TonguesLocaleFr()
+elseif GAME_LOCALE == "esES" or GAME_LOCALE == "esMX" then
+    TonguesLocaleEs()
 end

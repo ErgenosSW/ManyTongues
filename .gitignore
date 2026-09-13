@@ -45,3 +45,10 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Local development artifacts and credentials
+__pycache__/
+*.py[cod]
+*.zip
+.env
+.env.*

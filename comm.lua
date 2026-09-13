@@ -1,403 +1,149 @@
-Tonguesc = LibStub("AceComm-3.0");
---LibStub("AceComm-3.0"):Embed(Tongues)
+-- Tongues2 wire compatibility, with bounded requests and correlated replies.
+local T = Tongues
+local serializer = LibStub("AceSerializer-3.0")
+local function identity(name)
+    if not name:find("-",1,true) then name=name .. "-" .. GetNormalizedRealmName() end
+    return name:lower()
+end
+local function stringValue(value) return type(value)=="string" and #value<=4096 end
+local function recent(entry) return entry and GetTime()-entry.time <= 20 end
 
-local tserial = LibStub("AceSerializer-3.0");
-
----some of thie taken from GHI and Modified
-	Tonguesc:RegisterComm("Tongues2", function(...) Tonguesc:TonguesRecieveRawMessage(...) end)
-
-
-function Tonguesc:TonguesSendMessage(channel, player, ...)
-	Tonguesc:SendCommMessage("Tongues2", tserial:Serialize({...}), channel, player);
---print("Boo")
+function T:CommSend(target, ...)
+    if self:Restricted() or not self.Settings.Character.Enabled
+        or (C_ChatInfo.AreOutgoingAddonChatMessagesRestricted and C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()) then return false end
+    self.Comm:SendCommMessage("Tongues2",serializer:Serialize({...}),"WHISPER",target,"NORMAL")
+    return true
 end
 
-function Tonguesc:TonguesSendPrioritizedMessage(prio, channel, player, ...)
-	Tonguesc:SendCommMessage("Tongues2", tserial:Serialize({...}), channel, player, prio);
+function T:RequestTranslation(frame,event,sender,language,fluency,wire,kind,name,verb)
+    if not stringValue(sender) or fluency<=0 or not self.Comm then
+        if stringValue(sender) then self:RequestLearning(sender,language,fluency) end
+        return
+    end
+    local frameID = frame:GetID()
+    if not frameID or frameID<=0 then return end
+    local key = identity(sender) .. ":" .. event .. ":" .. frameID .. ":" .. language
+    local old = self.Pending[key]
+    if recent(old) and old.wire==wire then return end
+    self.RequestID=self.RequestID+1
+    local token=tostring(self.RequestID)
+    self.Pending[key]={time=GetTime(),frame=frame,event=event,language=language,fluency=fluency,
+        sender=identity(sender),wire=wire,kind=kind,name=name,verb=verb,token=token,frameID=frameID}
+    if kind then
+        self:CommSend(sender,kind=="pet" and "PR" or "RMN",fluency,name,frameID,language,verb,wire,token)
+    else
+        self:CommSend(sender,"RT",fluency,event,frameID,language,wire,token)
+    end
+    self:RequestLearning(sender,language,fluency)
 end
 
-function Tonguesc:TonguesRecieveRawMessage(cprefix,text,distribution,sender)
-	local sucess, t = tserial:Deserialize(text);
-	--print("COMM CHECK")
-	Tonguesc:TonguesReceiveMessage(cprefix, sender, distribution, unpack(t));
+function T:RequestLearning(sender,language,fluency)
+    if not self.Comm or not self.Settings.Character.LanguageLearning or fluency>=100 or self:Restricted() then return end
+    if identity(sender)==identity(UnitName("player")) then return end
+    local key=identity(sender) .. ":" .. language
+    if recent(self.Learning[key]) then return end
+    self.Learning[key]={time=GetTime(),language=language}
+    local s=self.Settings.Character
+    self:CommSend(sender,"RL",language,s.Faction,s.Race,s.Class,1,fluency)
 end
 
+function T:FindSpeech(language,wire,kind,event,sender)
+    for _, entry in ipairs(self.History or {}) do
+        if recent(entry) and entry.language==language and entry.kind==kind
+            and (not event or entry.channel==event)
+            and (not wire or entry.wire==wire or (not kind and not wire:match("^%[")))
+            and (entry.channel ~= "CHAT_MSG_WHISPER" or (sender and entry.target and identity(sender)==identity(entry.target))) then return entry end
+    end
+end
 
+function T:DisplayReply(sender,event,frameID,language,message,token,kind)
+    if not stringValue(event) or not stringValue(language) or not stringValue(message) then return end
+    local key=identity(sender) .. ":" .. event .. ":" .. tostring(frameID) .. ":" .. language
+    local pending=self.Pending[key]
+    if not recent(pending) or pending.kind~=kind or (token and token~=pending.token) then return end
+    self.Pending[key]=nil
+    local readable=self:Understand(message,language,pending.fluency)
+    local prefix=sender
+    if kind then prefix=prefix .. "'s " .. (pending.name or kind) end
+    local color=ChatTypeInfo[event:sub(10)] or ChatTypeInfo.SAY
+    pending.frame:AddMessage("[Tongues · " .. language .. "] " .. prefix .. ": " .. readable,color.r,color.g,color.b)
+end
 
+function T:ReceiveComm(prefix,text,distribution,sender)
+    if not self.Ready or not self.Settings.Character.Enabled or self:Restricted()
+        or not self.Accessible(prefix,text,distribution,sender) then return end
+    if prefix~="Tongues2" or distribution~="WHISPER" or not stringValue(sender) or not stringValue(text) then return end
+    local ok,payload=serializer:Deserialize(text)
+    if not ok or type(payload)~="table" or type(payload[1])~="string" then return end
+    -- Only a flat list of primitive values belongs to this protocol.
+    for key,value in pairs(payload) do
+        if type(key)~="number" or key<1 or key>12 or key%1~=0
+            or (type(value)~="number" and type(value)~="string") then return end
+        if type(value)=="string" and #value>4096 then return end
+    end
+    local op=payload[1]
+    local now=GetTime()
+    local rateKey=identity(sender)
+    local rate=self.Rates[rateKey]
+    if not rate or now-rate.time>1 then rate={time=now,count=0}; self.Rates[rateKey]=rate end
+    rate.count=rate.count+1
+    if rate.count>30 then return end
+    -- Expire all peer state; repeated messages must not grow tables indefinitely.
+    for _, cache in ipairs({self.Pending,self.Learning,self.Rates}) do
+        for key,entry in pairs(cache) do if now-entry.time>30 then cache[key]=nil end end
+    end
+    for key,time in pairs(self.LastLesson) do if now-time>30 then self.LastLesson[key]=nil end end
+    if op=="RT" then
+        local _,fluency,event,frameID,language,wire,token=unpack(payload)
+        if not stringValue(language) or not stringValue(event) or type(frameID)~="number" or (wire~=nil and not stringValue(wire)) then return end
+        local speech=self:FindSpeech(language,wire,nil,event,sender)
+        if speech then self:CommSend(sender,"TR",event,frameID,language,speech.human,token) end
+    elseif op=="TR" then
+        self:DisplayReply(sender,payload[2],payload[3],payload[4],payload[5],payload[6])
+    elseif op=="PR" or op=="RMN" then
+        local _,fluency,name,frameID,language,verb,wire,token=unpack(payload)
+        if not stringValue(language) or type(frameID)~="number" or (wire~=nil and not stringValue(wire)) then return end
+        local kind=op=="PR" and "pet" or "mount"
+        local speech=self:FindSpeech(language,wire,kind)
+        if speech then self:CommSend(sender,kind=="pet" and "RP" or "MNR",fluency,frameID,language,speech.name,speech.verb,speech.human,token) end
+    elseif op=="RP" or op=="MNR" then
+        self:DisplayReply(sender,"CHAT_MSG_EMOTE",payload[3],payload[4],payload[7],payload[8],op=="RP" and "pet" or "mount")
+    elseif op=="RL" then
+        local _,language,faction,race,class,frameID,fluency=unpack(payload)
+        if not stringValue(language) or not stringValue(faction) or not stringValue(race) or not stringValue(class) then return end
+        local s=self.Settings.Character
+        if not s.LanguageLearning or faction~=s.Faction then return end
+        if not (self:FindSpeech(language) or self:FindSpeech(language,nil,"pet") or self:FindSpeech(language,nil,"mount")) then return end
+        local dictionary=self.Language[self:GetRealLanguage(language)]
+        if not dictionary or not dictionary.Difficulty then return end
+        fluency=self.Number(fluency,0,0,100)
+        local own=s.Fluency[self:GetRealLanguage(language)] or 0
+        if own<fluency or fluency>=100 then return end
+        local last=self.LastLesson[rateKey .. language] or 0
+        if now-last<15 then return end
+        local d=dictionary.Difficulty
+        local difficulty=math.max(1,(d.default or 0)+(d[faction] or 0)+(d[race] or 0)+(d[class] or 0))
+        if math.random(1,math.max(1,math.floor(difficulty)))<=100 then
+            self.LastLesson[rateKey .. language]=now; self:CommSend(sender,"LR",language,1)
+        end
+    elseif op=="LR" then
+        local language=payload[2]
+        if not stringValue(language) or not self.Settings.Character.LanguageLearning then return end
+        local key=rateKey .. ":" .. language
+        if not recent(self.Learning[key]) then return end
+        self.Learning[key]=nil
+        local real=self:GetRealLanguage(language)
+        if not self.Language[real] then return end
+        local gained=self.Number(payload[3],0,0,1)
+        local current=self.Settings.Character.Fluency[real] or 0
+        self:SetFluency(real,current+gained)
+        if gained>0 then self:Print(language .. " skill +" .. gained) end
+    end
+end
 
-Tongues_ShowComm = false;
-function Tonguesc:TonguesReceiveMessage(cprefix, sender, distribution,trans,...)
-
---print(arg1,arg2)
- 
-
-          
-	        local TP = "<Tongues>"
-			local TPLen = string.len(TP)
-
-			--meta = string.match(meta, "^<Tongues>([%a%A]+)")
-			--print(meta)
-			
-			--REQUEST TRANSLATION------------------------------------------------------------------
-			if (trans =="RT") then
-				
-				--REMOVE TAG--
-				--pre = string.match(pre, "^:RT(:[%a%A]+)")
-				--print("after tag "..pre)
-				local flu,chan,fram,lang = ...
-				--POP FLUENCY
-				local fluency = 0;
-				fluency = flu
-				fluency = tonumber(fluency);
-
-				--POP CHANNEL
-				local channel = "";
-				channel = chan
-				--POP FRAME
-				local frame = 0;
-				frame = fram;
-
-				--POP LANGUAGE (looks for optional new : at the end)
-				local language = "";
-				language = string.match(lang, "([%a%A]+):?" )
-
-				if language == nil then
-					language = "Upgrade"
-				end;
-
-				--local prepstring = "<Tongues>:TR:channel=" .. channel .. ":frame=" .. frame .. ":" .. "[" .. language .. "] " .. Tongues.PreviousSentMsg
-				--prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-				--SendAddonMessage("Tongues", prepstring, "WHISPER",  arg4)
-                 Tonguesc:TonguesSendMessage("WHISPER",sender,"TR",channel,frame,language,Tongues.PreviousSentMsg)
-			--TRANSLATION RESPONSE RECEIVED--------------------------------------------------------
-			elseif (trans=="TR") then
-				--REMOVE TAG--
-				--trans = string.match(meta, "^:TR(:[%a%A]+)")
-				--print(trans)
-				local chan,fram,lang,msgg= ...;
-
-				--POP CHANNEL
-				local channel = "";
-				channel = chan;
-				--print(channel)
-				
-				local frame = 0;
-				frame = fram;
-
-				local colortable = {};
-				local prefix = "";
-				local postfix = "";
-				
-				if 	channel == "CHAT_MSG_SAY" then
-					postfix = " says"
-	
-					colortable = Tongues.Colors.SAY;
-				elseif 	channel == "CHAT_MSG_YELL" then
-					postfix = " yells"
-					colortable = Tongues.Colors.YELL;
-				elseif	channel == "CHAT_MSG_PARTY" then
-					prefix = "[Party] ";
-					colortable = Tongues.Colors.PARTY;
-				elseif 	channel == "CHAT_MSG_GUILD" then
-					prefix = "[Guild] ";
-					colortable = Tongues.Colors.GUILD;
-				elseif 	channel == "CHAT_MSG_OFFICER" then
-					prefix = "[Officer] ";
-					colortable = Tongues.Colors.OFFICER;
-				elseif 	channel == "CHAT_MSG_RAID" then
-					prefix = "[Raid] ";
-					colortable = Tongues.Colors.RAID;
-				elseif 	channel == "CHAT_MSG_RAID_WARNING" then
-					colortable = Tongues.Colors.RAID_WARNING;
-				elseif 	channel == "CHAT_MSG_BATTLEGROUND" then
-					prefix = "[Battleground] ";
-					colortable = Tongues.Colors.BATTLEGROUND;
-			     elseif channel == "CHAT_MSG_PARTY_LEADER" then
-				    prefix = "[Party Leader]";
-					colortable = Tongues.Colors.PARTY_LEADER;
-				end;
-				
-				sender = Tongues.GetCharacterWho(sender)
-				local prepstring = prefix ..sender..postfix .. ": ".."[" ..lang.. "] " .. msgg;
-				prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-
-				
-				if frame~=2 then--ignore combat frame
-				     --print("line 122")
-		
-					if UnitClass("player") == "Mage" and IsSpellKnown(210086) and TonguesmageKnownLang == true  then
-					--We are useing Arcane languages, do NOTHING, ABSOLUTLY NOTHING
-						prepstring = prefix ..sender..postfix .. ": ".. msgg;
-						prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-					else
-						_G["ChatFrame".. frame]:AddMessage(prepstring, (colortable[1]), (colortable[2]), (colortable[3]))
-					end
-				 
-				end
-			
-			-- REQUEST VERSION
-			elseif ( trans=="RV") then
-				--local prepstring = "<Tongues>:VR:version=" .. Tongues.Version .. ":"
-				--prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-				Tonguesc:TonguesSendMessage("WHISPER",sender,"VR",Tongues.Version)
-			
-			-- VERSION RECEIVED
-			elseif ( trans=="VR") then
-				--REMOVE TAG--
-				--arg2 = string.match(arg2, "^:VR(:[%a%A]+)")
-				local vers = ...;
-				--POP VERSION
-				local version = "";
-				version = vers;
-
-				SELECTED_CHAT_FRAME:AddMessage("(My Tongues version is v" .. version .. ")",1,1,0);
-			
-			-- REQUEST LEARN
-			elseif ( trans=="RL") then
-				--REMOVE TAG--
-				local lang,fact,rac,clas,fram,flu = ...;
-
-				--POP LANGUAGE
-				local language = "";
-				language = lang;
-
-				--POP FACTION
-				local faction = "";
-				faction = fact;
-
-				--POP RACE
-				local race = "";
-				race =rac;
-
-				--POP CLASS
-				local class = "";
-				class = clas;
-
-				--POP FRAME
-				local frame = 0;
-				frame = fram;
-
-				--POP FLUENCY
-				local fluency = 0;
-				fluency = flu;
-				fluency = tonumber(fluency);
-               
-				local learn = 1;
-				if Tongues.Language[language] ~= nil and Tongues.Language[language].Difficulty ~= nil and 
-				(Tongues.Settings.Character.Fluency[language] == nil or Tongues.Settings.Character.Fluency[language] >= fluency)
-				and sender ~= UnitName("player") then
-				--print("not else")
-					local d = Tongues.Language[language].Difficulty["default"] or 0
-					local f = Tongues.Language[language].Difficulty[faction] 	or 0
-					local r = Tongues.Language[language].Difficulty[race] 	or 0
-					local c = Tongues.Language[language].Difficulty[class] 	or 0
-					local result = d + f + r + c
-                     
-					--local seed = math.random(0,2147483647)+(GetTime()*1000);
-					--if result <= 0 then result = 100 end
-                    local randomres = math.random(1, (result+1));
-					if math.random(1, (result+1)) >= randomres and not( TTimerFrame:IsShown()) then
-			         
-                          
-						if TTimerFrame:IsShown() then 
-						else
-							Tonguesc:TonguesSendMessage("WHISPER",sender,"LR",language,learn)
-							TTimerFrame:Show()
-						end
-					 
-					end
-				 else 
-				 --print("else")
-					local d = Tongues.Language[language].Difficulty["default"] or 0
-					local f = Tongues.Language[language].Difficulty[faction] or 0
-					local r = Tongues.Language[language].Difficulty[race] 	or 0
-					local c = Tongues.Language[language].Difficulty[class] 	or 0
-					local result = d + f + r + c
-					    if result < 1 then result = 1 end
-						 local randomres = math.random(1, result+1);
-						
-                         if math.random(1, result+1) >= randomres and math.random(1,100) > 50 and not( TTimerFrame:IsShown()) then
-			             
-                          if TTimerFrame:IsShown() then 
-						  else
-					        Tonguesc:TonguesSendMessage("WHISPER",sender,"LR",language,learn)
-							TTimerFrame:Show()
-						   end
-				         end
-				end;
-			-- LEARN RECEIVED
-			elseif (trans == "LR") then
-				--REMOVE TAG--
-				
-               local lang,lrn = ...;
-				--POP LANGUAGE
-				local language = "";
-				language=lang;
-				--POP LEARN
-				local learn = "";
-				learn = lrn;
-				learn = tonumber(learn) or 0
-
-				if Tongues.Settings.Character.Fluency[language] == nil then
-					Tongues.Settings.Character.Fluency[language] = 0;
-				end;
-				
-				Tongues.Settings.Character.Fluency[language] = Tongues.Settings.Character.Fluency[language] + learn;
-
-				if Tongues.Settings.Character.Fluency[language] > 100 then
-					Tongues.Settings.Character.Fluency[language] = 100
-				elseif Tongues.Settings.Character.Fluency[language] < 0 then
-					Tongues.Settings.Character.Fluency[lanaguage] = 0
-				end;
-				Lib_UIDropDownMenu_Initialize(Tongues.UI.MainMenu.Speak.LanguageDropDown.Frame, Tongues.UpdateLanguageDropDown);	
-				SELECTED_CHAT_FRAME:AddMessage(language .. " skill up +" .. learn,0.5,0.5,1);
-			
-			-- REQUEST PETSPEAK
-			elseif ( trans=="PR") then
-				--REMOVE TAG--
-				local flu,petn,fram,lang,pst = ...
-
-				--POP FLUENCY
-				local fluency = 0;
-				fluency=flu;
-				fluency = tonumber(fluency);
-
-				--POP PETNAME
-				local petname = "";
-				petname=petn;
-
-				--POP FRAME
-				local frame = 0;
-				frame=fram
-
-				--POP LANGUAGE (looks for optional new : at the end)
-				local language = "";
-				language=lang;
-				--POP PETSPEAK
-				local petspeaktype = "";
-				petspeaktype=pst;
-
-				local prepstring = "<Tongues>:RP:fluency=" .. fluency .. ":frame=" .. frame .. ":language=".. language .. ":petname=" .. UnitName("pet") .. ":petspeaktype=" .. petspeaktype .. ":" .. Tongues.PreviousPetSentMsg
-				prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-                 Tonguesc:TonguesSendMessage("WHISPER",sender,"RP",fluency,frame,language,UnitName("pet"),petspeaktype,Tongues.PreviousPetSentMsg)
-				
-			
-			-- PETSPEAK RECEIVED
-			elseif (trans=="RP") then
-				--REMOVE TAG--
-				local flu,fram,lang,petn,pst,pmsg = ...;
-
-				--POP FLUENCY
-				local fluency = 0;
-				fluency=flu;
-				fluency = tonumber(fluency);
-
-				--POP FRAME
-				local frame = 0;
-				frame=fram;
-
-				--POP LANGUAGE (looks for optional new : at the end)
-				local language = "";
-				language=lang;
-
-				--POP PETNAME
-				local petname = "";
-				petname=petn;
-
-				--POP PETNAME
-				local petspeaktype = "";
-				petspeaktype=pst;
-
-				local petspeak = pmsg;
-				if petspeak ~= nil then
-					local prepstring = ""
-					if (language == "Common" and UnitFactionGroup("player") == "Alliance") or
-					   (language == "Orcish" and UnitFactionGroup("player") == "Horde") or
-					   (language == nil) then
-						prepstring = "[" .. petname .. "] " .. petspeaktype .. ": " .. petspeak
-					else
-						prepstring = "[" .. petname .. "] " .. petspeaktype .. ": " .. "[" .. language .. "] " .. petspeak
-					end;
-					prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-					_G["ChatFrame".. frame]:AddMessage(prepstring, 1, 1, 0.5)
-				end;
-		
-				----MOUNT SPEAK TRANSLATION
-				elseif ( trans=="RMN") then
-				--REMOVE TAG--
-				local flu,mountn,fram,lang,pst = ...
-
-				--POP FLUENCY
-				local fluency = 0;
-				fluency=flu;
-				fluency = tonumber(fluency);
-
-				--POP PETNAME
-				local mountname = "";
-				mountname=mountn;
-
-				--POP FRAME
-				local frame = 0;
-				frame=fram
-
-				--POP LANGUAGE (looks for optional new : at the end)
-				local language = "";
-				language=lang;
-				--POP PETSPEAK
-				local mountspeaktype = "";
-				mountspeaktype=pst;
-
-				local prepstring = "<Tongues>:RP:fluency=" .. fluency .. ":frame=" .. frame .. ":language=".. language .. ":mountname=" ..mountname.. ":mountspeaktype=" .. mountspeaktype .. ":" .. Tongues.PreviousMountSentMsg
-				prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-                 Tonguesc:TonguesSendMessage("WHISPER",sender,"MNR",fluency,frame,language,mountname,mountspeaktype,Tongues.PreviousMountSentMsg)
-				
-			-- MOUNTSPEAK RECEIVED
-			elseif (trans=="MNR") then
-				--REMOVE TAG--
-				local flu,fram,lang,mountn,pst,pmsg = ...;
-
-				--POP FLUENCY
-				local fluency = 0;
-				fluency=flu;
-				fluency = tonumber(fluency);
-
-				--POP FRAME
-				local frame = 0;
-				frame=fram;
-
-				--POP LANGUAGE (looks for optional new : at the end)
-				local language = "";
-				language=lang;
-
-				--POP PETNAME
-				local mountname = "";
-				mountname=mountn;
-
-				--POP PETNAME
-				local mountspeaktype = "";
-				mountspeaktype=pst;
-
-				local mountspeak = pmsg;
-				if mountspeak ~= nil then
-					local prepstring = ""
-					if (language == "Common" and UnitFactionGroup("player") == "Alliance") or
-					   (language == "Orcish" and UnitFactionGroup("player") == "Horde") or
-					   (language == nil) then
-						prepstring = "[" ..UnitName("player")"'s ".. mountname .. "] " .. mountspeaktype .. ": " .. mountspeak
-					
-					elseif sender == UnitName("player") and ((language == "Common" and UnitFactionGroup("player") == "Alliance") or
-					   (language == "Orcish" and UnitFactionGroup("player") == "Horde") or
-					   (language == nil))  then
-						prepstring = "["..mountname .. "] " .. mountspeaktype .. ": " .. mountspeak
-				elseif sender == UnitName("player") then
-						prepstring = "[".. mountname .. "] " .. mountspeaktype .. ": " .. "[" .. language .. "] " .. mountspeak
-
-				else
-						prepstring = "["..UnitName("player")"'s " .. mountname .. "] " .. mountspeaktype .. ": " .. "[" .. language .. "] " .. mountspeak
-					end;
-					prepstring = string.sub(prepstring, 1, TONGUES_MAX_MSG_LEN)
-					_G["ChatFrame".. frame]:AddMessage(prepstring, 1, 1, 0.5)
-				end;
-			end;
-
+function T:InitializeComm()
+    self.Comm={}
+    LibStub("AceComm-3.0"):Embed(self.Comm)
+    self.Pending,self.Learning,self.Rates,self.LastLesson,self.RequestID={},{},{},{},0
+    self.Comm:RegisterComm("Tongues2",function(...) self:ReceiveComm(...) end)
 end

@@ -1,0 +1,13 @@
+--[[Copyright i could find for the following, not all words used.
+"Copyright crap:  The author of this thingy retains full copyright of the material, while hereby granting full permission for it to be reprinted in any format whatsoever, with the provisos that his name be forever attached to it, the text of the document be forever unaltered, and if anyone manages to figure out how to make big bucks off of it, the above mentioned author wants a cut.  Oh, yes, and lest I forget, this notice  must remain attached to the main text.
+
+  I. Marc Carlson
+  IMC@VAX2.UTULSA.EDU
+  26 January 1994"
+==================================
+"The Unquiet Grave, Cyril Connolly.
+--------------------------------------------
+http://www.tcp.co.uk:80/~gentloser/
+
+All my own material is Copyright (c) by David Crowhurst 1995, 1996
+All other material is Copyright (c) the original authors"--]]

@@ -1,304 +1,80 @@
-Tongues = {};
-Tongues.Custom = {};
-Tongues.MenuClass={};
+-- Shared helpers. Language/dialect data retain their original authorship notices.
+Tongues = { Custom = {}, UI = {}, NONE = "<None>" }
+local T = Tongues
 
--- helpful function to merge tables
-function merge(arglist)
-	--Takes all passed tables and combines them into the output table
-	local newtable = {};
-	for i = 1, table.getn(arglist) do
-		for key, value in pairs(arglist[i]) do
-			newtable[key] = value;  
-		end
-	end
-	return newtable
-end
------------------------------------------------------------------------
-Tongues.ReturnSpecialLanguage = function()
-	local x
-	for x=1, GetNumLanguages() do
-		if GetLanguageByIndex(x) ~= "Orcish" and GetLanguageByIndex(x) ~= "Common" then
-			return GetLanguageByIndex(x)
-		end;
-	end
-end;
-
-Tongues.hasStarForm = function()
-		if UnitClass("player") == "Druid" and GetShapeshiftForm(true) ~= 0 then
-			if HasAttachedGlyph(24858) == "Glyph of Stars" then
-				return true
-			else
-				return false
-			end
-		end
-end
------------------------------------------------------------------------
-Tongues.PairsByKeys = function(t, f)
-	local a = {};
-	for n in pairs(t) do table.insert(a, n) end
-		table.sort(a, f);
-		local i = 0      -- iterator variable
-		local iter = function ()   -- iterator function
-			i = i + 1
-			if a[i] == nil then 
-				return nil
-			else 
-				return a[i], t[a[i]]
-			end;
-	end
-	return iter
-end
------------------------------------------------------------------------
--- BORROWED FROM LORE!!!!! The below comment is from the Lore addon (I kept this because it seems the most accurate to the Blizzard hash
--- Iriel's simpleHash algorithm: modified , also at Iriel's suggestion,
--- to reproduce the djb2 algorithm
-Tongues.Hash = function( text )
-
-	local l = strlen( text );
-	-- Prime numbers
-	local primes = { 5347, 5351, 5381, 5387, 5393, 5399, 5407, 5413, 5417, 5419, 5431, 5437, 5441, 5443, 5449 };
-
-	local h = 5381;
-
-	for i = 1, l, 1 do
-		local v = strbyte( text, i );
-		local p = primes[ mod( v, table.getn( primes ) ) + 1 ];
-
-		h = ( ( h * p ) + v );
-	end
-
-	return h;
-
-end;
-----------------------------------------------------------------------------------------------------------------------------------
--- This should be processed from a variable/table later
-Tongues.SplitLine = function(txt)
-	local subtxt = {};
-	local substring = "";
-	local flag = false;
-
-	substring = txt;
-	substring = string.gsub(substring, "([%a'%s\46\33\63\40\41\44]+)(\42[%a]+\42)([%a'%s\46\33\63\40\41\44]+)", 
-	function(a,b,c)
-		if ( a ~= " " ) then
-			table.insert(subtxt, a);
-		end;
-		if ( b ~= " " ) then
-			table.insert(subtxt, b);
-		end;
-		if ( c ~= " " ) then
-			table.insert(subtxt, c);
-		end;
-	end);
-
-	-- If there are no splits just use the original message
-	if (table.getn(subtxt) == 0) then
-		table.insert(subtxt,txt);
-	end
-
-	return subtxt
-end
-----------------------------------------------------------------------------------------------------------------------------------
-Tongues.ParseEmotes = function(msg)
-	-- Change text like "*smile*" to emotes this might be better off as a conditional right next to the Hook Send
-	msg = string.gsub(msg, "[\42]([%a]*)[\42]", function(a,b) DoEmote(string.upper(a)) return "" end);
-	return msg
-end
-----------------------------------------------------------------------------------------------------------------------------------
-Tongues.casematch = function (a, k, t)
-	local b;
-	if k ~= string.lower(a) then
-		if a == string.upper(a) then
-			b = string.upper(a);
-		elseif a == string.lower(a) then
-			b = string.lower(a);
-		elseif string.find(a, "^%u") then
-			b = string.gsub(a, "^(%a)", string.upper);
-		else
-			b = a
-		end;
-	elseif k == string.lower(a) then
-			if a == string.upper(a) then
-				b = string.upper(t[k])	
-			elseif a == string.lower(a) then
-				b = t[k]	
-			elseif string.find(a, "^%u") then
-				b = string.gsub(t[k], "^(%a)", string.upper);	
-			else
-				b = t[k]	
-			end;
-	end;
-	return b;
-end
-----------------------------------------------------------------------------------------------------------------------------------
-Tongues.AddTranslator = function(self,playername)
-	tinsert(self.Settings.Character.Translators, playername);
-end;
-----------------------------------------------------------------------------------------------------------------------------------
-Tongues.RemoveTranslator = function(self,playername)
-	newtable = {};
-	for i,v in ipairs(self.Settings.Character.Translators) do
-		if v ~= playername then
-			tinsert(newtable, playername);
-		end;
-	end;
-	self.Settings.Character.Translators = newtable;
-end;
-----------------------------------------------------------------------------------------------------------------------------------
-Tongues.FindTranslator = function(self,playername)
-	playerexists = false
-	for i,v in ipairs(self.Settings.Character.Translators) do
-		if string.lower(v) == string.lower(playername) then
-			playerexists = true;
-		end;
-	end;
-	return playerexists
-end;
-----------------------------------------------------------------------------------------------------------------------------------
-Tongues.GetRealLanguage = function(self, language)
-	if self.Language[language] ~= nil then
-		language = self.Language[language]["alias"] or language
-	end;
-
-	return language
-end;
-----------------------------------------------------------------------------------------------------------------------------------
-Tongues.UpdateLanguageDropDown = function(self)
-	local info            = {};
-	local k,v;
-
-	for k,v in Tongues.PairsByKeys(Tongues.Language) do
-		local fluency = Tongues.Settings.Character.Fluency[k] or 0
-		if fluency >= 30 then
-			info.text       = k;
-			info.value      = k;
-			info.checked 	= nil; 
-			info.func       = Tongues.UI.MainMenu.Speak.LanguageDropDown.OnClick;
-			Lib_UIDropDownMenu_AddButton(info);
-		end;
-	end;		
-end;
-
-
-Tongues.UpdateDialect = function(self)
-local info            = {};
-						local k,v;
-						for k,v in Tongues.PairsByKeys(Tongues.Dialect) do
-							info.text       = k;
-							info.value      = k;
-							info.checked = nil; 
-							info.func       = Tongues.UI.MainMenu.Speak.DialectDropDown.OnClick;
-							Lib_UIDropDownMenu_AddButton(info);
-						end;		
-
-end--used for language to dialect link
------------------------------------------------------------------------------------------------------------------------------------
----context menu Merge to tongues 2
-Tongues.Timer = function(self,elapsed)
-    local total = 0
- total = total + elapsed
-    if total >= 15 then
-       TTimerFrame:Hide()
-        total = 0
- 
-
+-- Used by the original data files when composing substitution tables.
+function merge(tables)
+    local result = {}
+    for _, values in ipairs(tables) do
+        for key, value in pairs(values) do result[key] = value end
     end
-
- 
-
+    return result
 end
 
-Tongues.UpdateLanguageContext = function(self)
-	local info            = {};
-	local k,v;
-Tongues.MenuClass.menuItems = {};
-	for k,v in Tongues.PairsByKeys(Tongues.Language) do
-	--print(k)
-	
-		local fluency = Tongues.Settings.Character.Fluency[k] or 0
-		if fluency >= 30 then
-		table.insert(Tongues.MenuClass.menuItems, {
-        ["text"] = k,
-        ["func"] = Tongues.LDBT.OnClick,
-        ["isTitle"] = nil,
-		
-    })			
-			--Tongues.Menuss:AddItem(text,func,isTitle);
-		
-		end;
-	end;		
-end;
+function T.Keys(values)
+    local keys = {}
+    for key in pairs(values or {}) do keys[#keys + 1] = key end
+    table.sort(keys)
+    return keys
+end
 
+function T.Number(value, default, minimum, maximum)
+    local number = tonumber(value)
+    if not number or number ~= number or number == math.huge or number == -math.huge then number = default end
+    return math.max(minimum, math.min(maximum, number))
+end
 
-Tongues.UpdateDialectContext = function(self)
-	local info            = {};
-	local k,v;
-Tongues.MenuClass.menuItems = {};
-	for k,v in Tongues.PairsByKeys(Tongues.Dialect) do
-		--local fluency = Tongues.Settings.Character.Fluency[k] or 0
-		--if fluency >= 30 then
-		table.insert(Tongues.MenuClass.menuItems, {
-        ["text"] = k,
-        ["func"] = Tongues.LDBT.OnClick,
-        ["isTitle"] = nil,
-		
-    })			
-			--Tongues.Menuss:AddItem(text,func,isTitle);
-		
-		--end;
-	end;		
-end;
-
-Tongues.GetPlayerWho = function()
-		if _G.msp_RPAddOn and msp then
-			local char = msp.my
-			-- Name, Title, House, Nickname
-			return char["NA"]--, char["NT"], char["NH"], char["NI"]
-		else
-			local nameTitle = UnitPVPName("player")
-			local tempName = UnitName("player")
-			nameTitle = gsub(nameTitle,tempName,"")
-			nameTitle = gsub(nameTitle,",","")
-			nameTitle = strtrim(nameTitle)
-			return  tempName--, nameTitle
-		end
-	end
-Tongues.GetCharacterWho = function(player)
-		if _G.msp_RPAddOn and msp then
-			if msp:PlayerKnownAbout(player) == true then
-				local char = msp.char[player]["field"]
-				-- Name, Title, House, Nickname
-				return char["NA"]--, char["NT"], char["NH"], char["NI"]
-			end
-		else
-			local nameTitle = UnitPVPName(player) or ""
-			local tempName = UnitName(player) or ""
-			nameTitle = gsub(nameTitle,tempName,"")
-			nameTitle = gsub(nameTitle,",","")
-			nameTitle = strtrim(nameTitle)
-			return  tempName--, nameTitle
-		end
-	end
-
-Tongues.MenuClass.menuItems= {};
-
-
-
-
-
-
---[[
-    Show the menu.
---]]
-Tongues.MenuClass.uniqueID = 0;
-Tongues.MenuClass.Show=function(self)
-
-    if not self.menuFrame then
-        while _G['GenericMenuClassFrame'..Tongues.MenuClass.uniqueID] do -- ensure that there's no namespace collisions
-            Tongues.MenuClass.uniqueID = Tongues.MenuClass.uniqueID + 1
-        end
-        -- the frame must be named for some reason
-        Tongues.MenuClass.menuFrame = CreateFrame('Frame', 'GenericMenuClassFrame'..Tongues.MenuClass.uniqueID, UIParent, "Lib_UIDropDownMenuTemplate")
+function T.Accessible(...)
+    if canaccessallvalues then return canaccessallvalues(...) end
+    for index = 1, select("#", ...) do
+        local value = select(index, ...)
+        if issecretvalue and issecretvalue(value) then return false end
     end
-    Lib_EasyMenu(Tongues.MenuClass.menuItems, Tongues.MenuClass.menuFrame, "cursor", 0, 0, 'MENU', 10)
+    return true
+end
+
+function T:Restricted()
+    return C_ChatInfo.InChatMessagingLockdown and C_ChatInfo.InChatMessagingLockdown() or false
+end
+
+function T:Print(message)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffb6d89dTongues:|r " .. message)
+end
+
+function T:GetRealLanguage(language)
+    local seen = {}
+    while self.Language[language] and self.Language[language].alias and not seen[language] do
+        seen[language] = true
+        language = self.Language[language].alias
+    end
+    return language
+end
+
+function T:Resolve(values, text)
+    if type(text) ~= "string" then return end
+    text = text:match("^%s*(.-)%s*$")
+    if values[text] then return text end
+    for key in pairs(values) do if key:lower() == text:lower() then return key end end
+end
+
+-- Keep links, textures and markup intact; transform only ordinary text.
+function T.MapText(text, transform)
+    local output, position = {}, 1
+    while position <= #text do
+        local start = text:find("|", position, true)
+        if not start then output[#output + 1] = transform(text:sub(position)); break end
+        if start > position then output[#output + 1] = transform(text:sub(position, start - 1)) end
+        local tail = text:sub(start)
+        local token = tail:match("^(|H.-|h.-|h)") or tail:match("^(|T.-|t)")
+            or tail:match("^(|A.-|a)") or tail:match("^(|c%x%x%x%x%x%x%x%x)")
+            or tail:match("^(|r)") or tail:match("^(||)") or "|"
+        output[#output + 1] = token
+        position = start + #token
+    end
+    return table.concat(output)
+end
+
+function T:Refresh()
+    if self.UI.Refresh then self.UI:Refresh() end
+    if self.Broker then self.Broker.text = self.Settings.Character.Language end
 end
