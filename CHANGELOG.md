@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0-dev — 2026-09-13
+## 1.0 — 2026-09-13
 
 - Target Retail 12.1.0 (Interface 120100).
 - Rebuild speech processing, lifecycle, commands and translation communication.

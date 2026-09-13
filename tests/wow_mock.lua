@@ -83,7 +83,7 @@ function UnitIsGroupLeader() return false end
 function UnitIsGroupAssistant() return false end
 LE_PARTY_CATEGORY_HOME,LE_PARTY_CATEGORY_INSTANCE=1,2
 ChatTypeInfo={SAY={r=1,g=1,b=1},EMOTE={r=1,g=.5,b=.5}}
-C_AddOns={GetAddOnMetadata=function() return '2.0.0-dev' end}
+C_AddOns={GetAddOnMetadata=function() return '1.0' end}
 C_ChatInfo={InChatMessagingLockdown=function() return M.restricted end,
  SendChatMessage=function(...) table.insert(M.wire,{...}) end,
  SendAddonMessage=function(...) table.insert(M.wire,{...}); return 0 end,
