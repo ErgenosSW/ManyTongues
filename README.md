@@ -2,7 +2,7 @@
 
 A little more character in your chat.
 
-ManyTongues is a continuation of the original **Tongues** roleplay addon for **WoW Retail 12.1.0**. Speak different languages, add dialects and speech effects, and choose how much your character understands — all through a rebuilt settings window.
+ManyTongues is a continuation of the original **Tongues** roleplay addon for **WoW Retail 12.1.0**. Speak different languages, add dialects and speech effects, and choose how much your character understands - all through a rebuilt settings window.
 
 ## Install
 
@@ -16,7 +16,7 @@ The final path should be:
 _retail_/Interface/AddOns/Tongues/Tongues.toc
 ```
 
-The project is called ManyTongues; the folder and in-game name are still Tongues.
+The project is called ManyTongues; the folder and in-game name are still Tongues. Make sure `Tongues.toc` is directly inside the `Tongues` folder, not inside another extracted subfolder.
 
 ## Get talking
 
@@ -30,10 +30,10 @@ The small button on your screen makes switching easy:
 
 There are four settings pages:
 
-- **Speech** — choose your language, dialect and effects, plus voices for pets, mounts and druid forms.
-- **Languages** — add or forget languages, set fluency from 0 to 100, and turn on gradual learning.
-- **Channels** — choose where to use your language and where to send readable copies.
-- **Translators** — choose players who receive readable copies of your speech.
+- **Speech** - choose your language, dialect and effects, plus voices for pets, mounts and druid forms.
+- **Languages** - add or forget languages, set fluency from 0 to 100, and turn on gradual learning.
+- **Channels** - choose where to use your language and where to send readable copies.
+- **Translators** - choose players who receive readable copies of your speech.
 
 Settings save automatically. You can also open them from **Settings → AddOns → Tongues**.
 
