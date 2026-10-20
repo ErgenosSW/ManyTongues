@@ -1,0 +1,46 @@
+name: Release addon
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Test and build addon ZIP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y lua5.1 rsync zip
+      - name: Validate release tag
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          toc_version=$(sed -n 's/^## Version: //p' Tongues.toc)
+          test -n "$version"
+          test "$version" = "$toc_version"
+      - name: Run addon checks
+        run: python3 tests/check.py
+      - name: Build installable addon ZIP
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p staging/Tongues artifacts
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='tests' \
+            --exclude='staging' \
+            --exclude='artifacts' \
+            ./ staging/Tongues/
+          (cd staging && zip -r "../artifacts/ManyTongues-${version}.zip" Tongues)
+          unzip -l "artifacts/ManyTongues-${version}.zip" | grep -F 'Tongues/Tongues.toc'
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ManyTongues-${{ github.ref_name }}
+          path: artifacts/*.zip
+          if-no-files-found: error
