@@ -1,5 +1,7 @@
 # ManyTongues
 
+[![Tests](https://github.com/ErgenosSW/ManyTongues/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/ErgenosSW/ManyTongues/actions/workflows/tests.yml)
+
 A little more character in your chat.
 
 ManyTongues is a continuation of the original **Tongues** roleplay addon for **WoW Retail 12.1.0**. Speak different languages, add dialects and speech effects, and choose how much your character understands - all through a rebuilt settings window.
