@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1 — 2026-10-25
+
+- Target Retail 12.1.5 (Interface 120105), build 70575.
+- Verify the pre-send chat integration and chat API documentation against the
+  matching Blizzard UI source mirror; no processing changes are required.
+- Refresh the installation version and in-game acceptance target.
+- Local syntax, manifest, 25 regression checks and 10 additional locale checks
+  pass. In-client acceptance remains pending.
+
 ## 1.0 — 2026-09-13
 
 - Target Retail 12.1.0 (Interface 120100).

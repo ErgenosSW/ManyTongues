@@ -1,6 +1,6 @@
 # Retail acceptance checks — not yet executed in WoW
 
-Target: 12.1.0 / build 69814 reference. Record the result of `/dump GetBuildInfo()` when testing on another live build. A manifest version alone does not establish API compatibility.
+Target: 12.1.5 / build 70575 reference. Record the result of `/dump GetBuildInfo()` when testing on another live build. A manifest version alone does not establish API compatibility.
 
 Enable Lua error reporting with `/console scriptErrors 1`, then `/reload`. Use two characters with Tongues for translation checks. Tests should first use the default Blizzard chat and Tongues alone, then the normal addon set.
 

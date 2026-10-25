@@ -2,7 +2,7 @@
 local addonName = ...
 local T = Tongues
 T.Version = C_AddOns.GetAddOnMetadata(addonName or "Tongues", "Version")
-T.TargetInterface = 120100
+T.TargetInterface = 120105
 
 local defaults = {
     Enabled=true, LanguageLearning=true, ShapeshiftLanguage=true, MMH=false,

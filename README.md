@@ -4,11 +4,11 @@
 
 A little more character in your chat.
 
-ManyTongues is a continuation of the original **Tongues** roleplay addon for **WoW Retail 12.1.0**. Speak different languages, add dialects and speech effects, and choose how much your character understands - all through a rebuilt settings window.
+ManyTongues is a continuation of the original **Tongues** roleplay addon for **WoW Retail 12.1.5**. Speak different languages, add dialects and speech effects, and choose how much your character understands - all through a rebuilt settings window.
 
 ## Install
 
-1. Download `ManyTongues-1.0.zip` from the [latest release](https://github.com/ErgenosSW/ManyTongues/releases/latest) and extract it.
+1. Download `ManyTongues-1.0.1.zip` from the [latest release](https://github.com/ErgenosSW/ManyTongues/releases/latest) and extract it.
 2. Put the extracted **Tongues** folder in `_retail_/Interface/AddOns/`.
 3. Enable **Tongues** in the addon list and type `/tongues` in game.
 
@@ -70,3 +70,13 @@ The original project declares **GPLv3**. See [LICENSE](LICENSE) and [third-party
 ## Want to tinker?
 
 Run `python3 tests/check.py` with Python 3.9+ and Lua 5.1 installed. These tests simulate the WoW API; the [in-game checklist](TEST-IN-GAME.md) covers checks in the actual client. See the [changelog](CHANGELOG.md) for changes.
+
+## Retail compatibility
+
+Target: Retail **12.1.5 / Interface 120105**, installed build **70575**.
+The chat integration was compared with the Blizzard UI source mirror at
+[`15881d522c44cd106d3d8660106ec9f9d2f44167`](https://github.com/Gethe/wow-ui-source/tree/15881d522c44cd106d3d8660106ec9f9d2f44167),
+identified there as `12.1.5 (70575)`, on 2026-10-25. The pre-send editbox
+implementation is unchanged from the previous 12.1.0 reference; the chat API
+documentation differs only in whitespace. No chat-processing rewrite is needed.
+Local simulation checks pass; the in-game acceptance checks remain pending.

@@ -1,6 +1,6 @@
-## Interface: 120100
+## Interface: 120105
 ## Title: Tongues
-## Version: 1.0
+## Version: 1.0.1
 ## Notes: Roleplay languages, dialects, speech effects and translations.
 ## Author: Skrull Adams, Aurorablade/Fethas; community modernization
 ## SavedVariables: Tongues_Global
