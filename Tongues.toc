@@ -1,8 +1,8 @@
 ## Interface: 120105, 16001
-## Title: Tongues
-## Version: 1.1.0
+## Title: ManyTongues
+## Version: 1.2.0
 ## Notes: Roleplay languages, dialects, speech effects and translations.
-## Author: Skrull Adams, Aurorablade/Fethas; community modernization
+## Author: ErgenosSW
 ## SavedVariables: Tongues_Global
 ## SavedVariablesPerCharacter: Tongues_Character
 

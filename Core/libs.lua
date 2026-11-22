@@ -1,6 +1,8 @@
 -- Shared helpers. Language/dialect data retain their original authorship notices.
-Tongues = { Custom = {}, UI = {}, NONE = "<None>" }
-local T = Tongues
+ManyTongues = { Custom = {}, UI = {}, NONE = "<None>" }
+-- Internal alias retains compatibility with the bundled dictionaries.
+Tongues = ManyTongues
+local T = ManyTongues
 
 -- Used by the original data files when composing substitution tables.
 function merge(tables)
@@ -38,7 +40,7 @@ function T:Restricted()
 end
 
 function T:Print(message)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffb6d89dTongues:|r " .. message)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffb6d89dManyTongues:|r " .. message)
 end
 
 function T:GetRealLanguage(language)
@@ -76,5 +78,5 @@ end
 
 function T:Refresh()
     if self.UI.Refresh then self.UI:Refresh() end
-    if self.Broker then self.Broker.text = self.Settings.Character.Language end
+    if self.Broker then self.Broker.text = self:SpeechLanguage() end
 end

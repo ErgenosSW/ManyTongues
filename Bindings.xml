@@ -1,0 +1,8 @@
+<Bindings>
+    <Binding name="MANYTONGUES_TOGGLE_IC" header="MANYTONGUES" category="ADDONS">
+        ManyTongues:ToggleInCharacter()
+    </Binding>
+    <Binding name="MANYTONGUES_NEXT_LANGUAGE" category="ADDONS">
+        ManyTongues:CycleLanguage()
+    </Binding>
+</Bindings>

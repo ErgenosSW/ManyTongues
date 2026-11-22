@@ -15,25 +15,55 @@ function T:CommSend(target, ...)
     return true
 end
 
-function T:RequestTranslation(frame,event,sender,language,fluency,wire,kind,name,verb)
+-- Tokens identify individual requests; a conversation can have many in flight.
+function T:PrunePending()
+    for token, entry in pairs(self.Pending) do
+        if not recent(entry) then
+            self.Pending[token] = nil
+            self.CommStats.timedOut = self.CommStats.timedOut + 1
+        end
+    end
+end
+
+function T:RequestTranslation(frame,event,sender,language,fluency,wire,kind,name,verb,lineID)
     if not stringValue(sender) or fluency<=0 or not self.Comm then
         if stringValue(sender) then self:RequestLearning(sender,language,fluency) end
         return
     end
     local frameID = frame:GetID()
     if not frameID or frameID<=0 then return end
-    local key = identity(sender) .. ":" .. event .. ":" .. frameID .. ":" .. language
-    local old = self.Pending[key]
-    if recent(old) and old.wire==wire then return end
-    self.RequestID=self.RequestID+1
-    local token=tostring(self.RequestID)
-    self.Pending[key]={time=GetTime(),frame=frame,event=event,language=language,fluency=fluency,
-        sender=identity(sender),wire=wire,kind=kind,name=name,verb=verb,token=token,frameID=frameID}
-    if kind then
-        self:CommSend(sender,kind=="pet" and "PR" or "RMN",fluency,name,frameID,language,verb,wire,token)
-    else
-        self:CommSend(sender,"RT",fluency,event,frameID,language,wire,token)
+    self:PrunePending()
+    local peer, total, peerCount, ambiguous = identity(sender), 0, 0, false
+    for _, entry in pairs(self.Pending) do
+        total = total + 1
+        if entry.sender == peer then peerCount = peerCount + 1 end
+        if entry.sender==peer and entry.event==event and entry.frameID==frameID
+            and entry.language==language and entry.kind==kind and entry.wire==wire
+            and ((lineID and entry.lineID==lineID) or (not lineID and not entry.lineID and GetTime()-entry.time<0.5)) then return end
     end
+    if total>=256 or peerCount>=32 then
+        self.CommStats.queueFull = self.CommStats.queueFull + 1
+        return
+    end
+    self.RequestID=self.RequestID+1
+    local token=self.RequestEpoch .. ":" .. self.RequestID
+    local sent
+    if kind then
+        sent=self:CommSend(sender,kind=="pet" and "PR" or "RMN",fluency,name,frameID,language,verb,wire,token)
+    else
+        sent=self:CommSend(sender,"RT",fluency,event,frameID,language,wire,token)
+    end
+    if not sent then self.CommStats.blocked=self.CommStats.blocked+1; return end
+    -- Once requests overlap, replies without tokens cannot safely identify either line.
+    for _, entry in pairs(self.Pending) do
+        if entry.sender==peer and entry.event==event and entry.frameID==frameID
+            and entry.language==language and entry.kind==kind then
+            entry.legacyAmbiguous=true; ambiguous=true
+        end
+    end
+    self.Pending[token]={time=GetTime(),frame=frame,event=event,language=language,fluency=fluency,
+        sender=peer,wire=wire,kind=kind,name=name,verb=verb,token=token,frameID=frameID,lineID=lineID,legacyAmbiguous=ambiguous}
+    self.CommStats.requested=self.CommStats.requested+1
     self:RequestLearning(sender,language,fluency)
 end
 
@@ -58,15 +88,30 @@ end
 
 function T:DisplayReply(sender,event,frameID,language,message,token,kind)
     if not stringValue(event) or not stringValue(language) or not stringValue(message) then return end
-    local key=identity(sender) .. ":" .. event .. ":" .. tostring(frameID) .. ":" .. language
-    local pending=self.Pending[key]
-    if not recent(pending) or pending.kind~=kind or (token and token~=pending.token) then return end
-    self.Pending[key]=nil
+    self:PrunePending()
+    local peer, pending, pendingToken = identity(sender)
+    if token ~= nil then
+        if not stringValue(token) then return end
+        pending, pendingToken = self.Pending[token], token
+    else
+        -- Legacy replies have no token. Accept only one unambiguous candidate.
+        for candidateToken, entry in pairs(self.Pending) do
+            if entry.sender==peer and entry.event==event and entry.frameID==frameID
+                and entry.language==language and entry.kind==kind then
+                if pending or entry.legacyAmbiguous then self.CommStats.ambiguous=self.CommStats.ambiguous+1; return end
+                pending, pendingToken = entry, candidateToken
+            end
+        end
+    end
+    if not pending or pending.sender~=peer or pending.event~=event or pending.frameID~=frameID
+        or pending.language~=language or pending.kind~=kind then return end
+    self.Pending[pendingToken]=nil
+    self.CommStats.received=self.CommStats.received+1
     local readable=self:Understand(message,language,pending.fluency)
     local prefix=sender
     if kind then prefix=prefix .. "'s " .. (pending.name or kind) end
     local color=ChatTypeInfo[event:sub(10)] or ChatTypeInfo.SAY
-    pending.frame:AddMessage("[Tongues · " .. language .. "] " .. prefix .. ": " .. readable,color.r,color.g,color.b)
+    pending.frame:AddMessage("[ManyTongues · " .. language .. "] " .. prefix .. ": " .. readable,color.r,color.g,color.b)
 end
 
 function T:ReceiveComm(prefix,text,distribution,sender)
@@ -89,7 +134,8 @@ function T:ReceiveComm(prefix,text,distribution,sender)
     rate.count=rate.count+1
     if rate.count>30 then return end
     -- Expire all peer state; repeated messages must not grow tables indefinitely.
-    for _, cache in ipairs({self.Pending,self.Learning,self.Rates}) do
+    self:PrunePending()
+    for _, cache in ipairs({self.Learning,self.Rates}) do
         for key,entry in pairs(cache) do if now-entry.time>30 then cache[key]=nil end end
     end
     for key,time in pairs(self.LastLesson) do if now-time>30 then self.LastLesson[key]=nil end end
@@ -145,5 +191,7 @@ function T:InitializeComm()
     self.Comm={}
     LibStub("AceComm-3.0"):Embed(self.Comm)
     self.Pending,self.Learning,self.Rates,self.LastLesson,self.RequestID={},{},{},{},0
+    self.RequestEpoch=tostring(GetTime())
+    self.CommStats={requested=0,received=0,timedOut=0,ambiguous=0,blocked=0,queueFull=0}
     self.Comm:RegisterComm("Tongues2",function(...) self:ReceiveComm(...) end)
 end

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.0 — 2026-11-23
+
+- Queue translation requests individually and validate out-of-order replies by token, sender, channel, frame, language and speech kind.
+- Add queue expiry, size limits, chat-line deduplication and conservative handling of overlapping legacy replies.
+- Add /manytongues doctor with local session counters and restriction status.
+- Add an IC/OOC floating control, commands and optional keybinding; OOC preserves incoming translations and character preferences.
+- Add favorite languages, a quick selection list, favorite-first cycling and mouse-wheel navigation.
+- Keep the fantasy UI and manual druid animal-language choice.
+- Add regression tests for independent translation peers, bursts, duplicates, bounds, mode persistence, favorites and keyboard binding actions.
+- Add isolated three-client AceComm/ChatThrottleLib transport tests, randomized message order, duplicate handling, 500-action state checks and optional read-only migration checks against local SavedVariables.
+- Real-client acceptance testing remains pending for this version.
+
+## 1.1.1 — 2026-11-22
+
+- Keep the selected language when entering druid forms; offer animal speech through a secondary floating button.
+- Clear temporary animal speech on leaving/changing form, selecting a normal language or reloading.
+
+- Use ManyTongues in the addon list, settings category, broker and chat messages.
+- Change the main slash command to /manytongues, including help and usage examples.
+- Keep original authorship notices in the licensing documentation and source headers.
+- Retain the technical folder, saved-variable identifiers and wire protocol for compatibility.
+
 ## 1.1.0 — 2026-11-22
 
 - Restyle the settings and chooser with Blizzard panel tabs, parchment pages and dark ink text.

@@ -48,7 +48,7 @@ function methods:Enable() self.disabled=false end
 function methods:Click(button) if not self.disabled then self:Fire('OnClick',button or 'LeftButton') end end
 function methods:CreateFontString(name) return CreateFrame('FontString',name,self) end
 function methods:CreateTexture(name) return CreateFrame('Texture',name,self) end
-for _,name in ipairs({'SetAllPoints','SetAtlas','SetTexture','SetTexCoord','SetBlendMode','SetDesaturated','SetVertexColor','SetTextColor','SetShadowOffset','SetShadowColor','SetWordWrap','SetColorTexture','SetJustifyH','SetBackdrop','SetBackdropColor','SetBackdropBorderColor','SetMinMaxValues',
+for _,name in ipairs({'SetClampRectInsets','EnableMouseWheel','SetFontString','SetAllPoints','SetAtlas','SetTexture','SetTexCoord','SetBlendMode','SetDesaturated','SetVertexColor','SetTextColor','SetShadowOffset','SetShadowColor','SetWordWrap','SetColorTexture','SetJustifyH','SetBackdrop','SetBackdropColor','SetBackdropBorderColor','SetMinMaxValues',
     'SetValueStep','SetObeyStepOnDrag','SetFrameStrata','SetClampedToScreen','SetMovable','EnableMouse',
     'RegisterForDrag','StartMoving','StopMovingOrSizing','SetScale','SetAutoFocus','SetFocus','ClearFocus',
     'SetVerticalScroll','SetMaxLetters','RegisterForClicks','SetOwner','AddLine','SetAlpha','SetParent'}) do
@@ -71,7 +71,7 @@ function GetFramerate() return 60 end
 function GetNormalizedRealmName() return 'Realm' end
 function UnitName(unit) if unit=='target' then return M.target elseif unit=='pet' then return M.pet else return 'Tester' end end
 function UnitFullName(unit) return UnitName(unit),'Realm' end
-function UnitClass() return 'Druid','DRUID' end
+function UnitClass() return M.class or 'Druid',M.class or 'DRUID' end
 function UnitRace() return 'Night Elf','NightElf' end
 function UnitFactionGroup() return 'Alliance' end
 function UnitCreatureFamily() return 'Cat' end
@@ -131,3 +131,5 @@ function PanelTemplates_SelectTab(tab) tab:Disable() end
 
 function methods:SetFrameLevel(level) self.level=level end
 function methods:GetFrameLevel() return self.level or (self.parent and self.parent:GetFrameLevel()+1 or 0) end
+
+function IsShiftKeyDown() return Mock.shift or false end

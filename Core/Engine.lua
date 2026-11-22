@@ -108,9 +108,9 @@ function T:NativeLanguages()
     return languages
 end
 
-function T:SpeechLanguage()
+function T:GetFormLanguage()
     local s = self.Settings.Character
-    if not s.ShapeshiftLanguage or select(2, UnitClass("player")) ~= "DRUID" then return s.Language end
+    if not s.ShapeshiftLanguage or select(2, UnitClass("player")) ~= "DRUID" then return end
     -- Spell IDs are independent of the client's UI language.
     local forms = {[768] = "Cat", [5487] = "Bear", [783] = "Stag", [1066] = "Seal",
         [24858] = T_Moonkin, [33891] = T_Trentish, [114282] = T_Trentish,
@@ -119,16 +119,38 @@ function T:SpeechLanguage()
     for index = 1, GetNumShapeshiftForms() do
         local _, active, _, spellID = GetShapeshiftFormInfo(index)
         if self.Accessible(active, spellID) and active then
-            if s.FormLanguage ~= self.NONE then return s.FormLanguage end
+            if s.FormLanguage ~= self.NONE then return s.FormLanguage, spellID end
             local language = forms[spellID]
             if spellID == 783 then
                 if IsSwimming() then language = "Seal" elseif IsFlying() then language = T_Bird end
             end
             if language and not self.Language[language] then language = creatures[language] end
-            if self.Language[language] then return language end
+            if self.Language[language] then return language, spellID end
         end
     end
-    return s.Language
+end
+
+function T:UpdateFormSpeech()
+    local language, spellID = self:GetFormLanguage()
+    local choice = self.FormSpeechChoice
+    if choice and (choice.spellID ~= spellID or choice.language ~= language) then
+        self.FormSpeechChoice = nil
+    end
+    return language, spellID
+end
+
+function T:ToggleFormSpeech()
+    if self:Restricted() or not self.Settings.Character.Enabled or not self.Settings.Character.InCharacter then return end
+    local language, spellID = self:UpdateFormSpeech()
+    if not language then return end
+    if self.FormSpeechChoice then self.FormSpeechChoice = nil
+    else self.FormSpeechChoice = {language=language,spellID=spellID} end
+    self:Refresh()
+end
+
+function T:SpeechLanguage()
+    self:UpdateFormSpeech()
+    return self.FormSpeechChoice and self.FormSpeechChoice.language or self.Settings.Character.Language
 end
 
 T.ChannelKeys = {PARTY="Party", PARTY_LEADER="Party", RAID="Raid", RAID_LEADER="Raid",
@@ -139,7 +161,7 @@ T.SpeechChannels = {SAY=true,YELL=true,PARTY=true,RAID=true,RAID_WARNING=true,GU
 
 function T:PrepareMessage(message, channel)
     local s = self.Settings.Character
-    if not s.Enabled or not self.SpeechChannels[channel] or message:match("^%s*%(") then return message end
+    if not s.Enabled or not s.InCharacter or not self.SpeechChannels[channel] or message:match("^%s*%(") then return message end
     local key = self.ChannelKeys[channel]
     if key and s.Screen[key] then return message end
     local language = self:SpeechLanguage()

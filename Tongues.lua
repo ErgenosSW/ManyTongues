@@ -6,12 +6,12 @@ T.Version = C_AddOns.GetAddOnMetadata(addonName or "Tongues", "Version")
 T.TargetInterface = select(4, GetBuildInfo())
 
 local defaults = {
-    Enabled=true, LanguageLearning=true, ShapeshiftLanguage=true, MMH=false,
+    Enabled=true, InCharacter=true, LanguageLearning=true, ShapeshiftLanguage=true, MMH=false,
     Dialect="<None>", Affect="<None>", Filter="<None>", AffectFrequency=100,
     FormLanguage="<None>", PetLanguage="<None>", MountLanguage="<None>",
     Translations={Self=false,Targetted=false,Party=false,Guild=false,Officer=false,Raid=false,RaidAlert=false,Battleground=false},
     Screen={Self=false,Targetted=false,Party=true,Guild=true,Officer=true,Raid=true,RaidAlert=true,Battleground=true},
-    Fluency={}, Translators={}, UI={MainMenu={},MiniMenu={}},
+    Fluency={}, Favorites={}, Translators={}, UI={MainMenu={},MiniMenu={}},
 }
 
 local function fill(values, template)
@@ -46,6 +46,9 @@ function T:LoadSettings()
         if type(language) ~= "string" then s.Fluency[language] = nil
         else s.Fluency[language] = self.Number(value, 0, 0, 100) end
     end
+    for language, favorite in pairs(s.Favorites) do
+        if not self.Language[language] or favorite~=true then s.Favorites[language]=nil end
+    end
     local native = self:NativeLanguages()
     if fresh then
         for language in pairs(native) do s.Fluency[self:GetRealLanguage(language)] = 100 end
@@ -61,12 +64,13 @@ function T:LoadSettings()
     for _, position in pairs(s.UI) do
         if type(position) == "table" then position.relativeTo = nil end
     end
-    s.SchemaVersion = 2
+    s.SchemaVersion = 3
 end
 
 function T:SetLanguage(language)
     local resolved = self:Resolve(self.Language, language)
     if not resolved then return false, "Unknown language: " .. tostring(language) end
+    self.FormSpeechChoice = nil
     self.Settings.Character.Language = resolved
     self:Refresh()
     return true
@@ -80,15 +84,56 @@ function T:SetFluency(language, fluency)
     return true
 end
 
-function T:CycleLanguage()
-    local choices = {}
-    for _, language in ipairs(self.Keys(self.Language)) do
-        if (self.Settings.Character.Fluency[self:GetRealLanguage(language)] or 0) >= 30 then choices[#choices + 1] = language end
+function T:SetInCharacter(enabled)
+    self.Settings.Character.InCharacter = enabled and true or false
+    self:Refresh()
+end
+
+function T:ToggleInCharacter()
+    self:SetInCharacter(not self.Settings.Character.InCharacter)
+end
+
+function T:SetFavorite(language, enabled)
+    local resolved = self:Resolve(self.Language,language)
+    if not resolved then return false end
+    self.Settings.Character.Favorites[resolved] = enabled and true or nil
+    self:Refresh()
+    return true
+end
+
+function T:CycleLanguage(direction)
+    local s, choices = self.Settings.Character, {}
+    for _, language in ipairs(self.Keys(s.Favorites)) do
+        if s.Favorites[language] and self.Language[language] then choices[#choices+1]=language end
     end
-    if #choices == 0 then return end
-    local index = 0
-    for i, language in ipairs(choices) do if language == self.Settings.Character.Language then index = i; break end end
-    self:SetLanguage(choices[index % #choices + 1])
+    if #choices==0 then
+        for _, language in ipairs(self.Keys(self.Language)) do
+            if (s.Fluency[self:GetRealLanguage(language)] or 0)>=30 then choices[#choices+1]=language end
+        end
+    end
+    if #choices==0 then return end
+    local step = direction==-1 and -1 or 1
+    local index
+    for i,language in ipairs(choices) do if language==s.Language then index=i; break end end
+    self:SetLanguage(choices[index and ((index-1+step)%#choices+1) or (step==1 and 1 or #choices)])
+end
+
+function T:Doctor()
+    self:PrunePending()
+    local count=0
+    for _ in pairs(self.Pending) do count=count+1 end
+    local stats=self.CommStats
+    self:Print("Version " .. (self.Version or "?") .. ", interface " .. self.TargetInterface)
+    self:Print("Processing: " .. (self.Settings.Character.Enabled and "enabled" or "disabled")
+        .. "; outgoing speech: " .. (self.Settings.Character.InCharacter and "IC" or "OOC"))
+    self:Print("Chat lockdown: " .. (self:Restricted() and "yes" or "no")
+        .. "; addon traffic restricted: " .. ((C_ChatInfo.AreOutgoingAddonChatMessagesRestricted
+        and C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()) and "yes" or "no"))
+    self:Print("Translations: " .. stats.requested .. " requested, " .. stats.received .. " received, "
+        .. count .. " pending, " .. stats.timedOut .. " timed out")
+    self:Print("Skipped: " .. stats.ambiguous .. " ambiguous legacy replies, " .. stats.blocked
+        .. " blocked requests, " .. stats.queueFull .. " queue limit")
+    self:Print("Counters cover this session only; a timeout can also mean no compatible peer or unsupported communication.")
 end
 
 function T:AddTranslator(name, quiet)
@@ -189,7 +234,7 @@ function T:Receive(frame, event, message, sender, language, ...)
     if not resolved then return end
     local fluency = self.Settings.Character.Fluency[self:GetRealLanguage(resolved)] or 0
     if tagged or petLanguage or not self:NativeLanguages()[language] then
-        self:RequestTranslation(frame, event, sender, resolved, fluency, message, kind, animalName, verb)
+        self:RequestTranslation(frame, event, sender, resolved, fluency, message, kind, animalName, verb, select(8, ...))
         -- Always retain the original; absent/nonresponsive addons must never swallow chat.
         return
     end
@@ -205,6 +250,9 @@ function T:Receive(frame, event, message, sender, language, ...)
 end
 
 function T:AnimalSpeak(kind, text)
+    if self.Ready and not self.Settings.Character.InCharacter then
+        self:Print("Switch to IC to speak as a pet or mount."); return
+    end
     if not self.Ready or self:Restricted() then self:Print("Speech is unavailable while chat is restricted."); return end
     if text == "" then self:Print("Enter text after /petspeak or /mountspeak."); return end
     local name, language, verb
@@ -245,7 +293,16 @@ function T:Command(text)
     command = command:lower()
     local s = self.Settings.Character
     if command == "help" then
-        self:Print("/tongues [language] | opt | cycle | add <language> <0-100> | remove <language> | dialect <name> | affect <name> [0-100] | roleplay | shapeshift | translate <Name-Realm> | reset | list")
+        self:Print("/manytongues [language] | ic | ooc | toggle | favorites | favorite [language] | doctor | opt | cycle | add <language> <0-100> | remove <language> | dialect <name> | affect <name> [0-100] | roleplay | shapeshift | translate <Name-Realm> | reset | list")
+    elseif command == "ic" then self:SetInCharacter(true)
+    elseif command == "ooc" then self:SetInCharacter(false)
+    elseif command == "toggle" then self:ToggleInCharacter()
+    elseif command == "doctor" then self:Doctor()
+    elseif command == "favorites" then self.UI:PickLanguages()
+    elseif command == "favorite" then
+        local language=self:Resolve(self.Language,rest~="" and rest or s.Language)
+        if language then self:SetFavorite(language,not s.Favorites[language])
+        else self:Print("Unknown language: " .. rest) end
     elseif command == "cycle" then self:CycleLanguage()
     elseif command == "reset" then self.UI:ResetPosition()
     elseif command == "roleplay" then s.Filter = s.Filter == self.NONE and "Roleplay" or self.NONE
@@ -253,7 +310,7 @@ function T:Command(text)
         if rest == "true" then s.ShapeshiftLanguage = true elseif rest == "false" then s.ShapeshiftLanguage = false else s.ShapeshiftLanguage = not s.ShapeshiftLanguage end
     elseif command == "add" then
         local language, fluency = rest:match("^(.-)%s+([%d.]+)$")
-        if not self:SetFluency(language, fluency) then self:Print("Use: /tongues add <language> <0-100>") end
+        if not self:SetFluency(language, fluency) then self:Print("Use: /manytongues add <language> <0-100>") end
     elseif command == "remove" then
         local language = self:Resolve(self.Language, rest)
         if language then s.Fluency[self:GetRealLanguage(language)] = nil end
@@ -281,8 +338,11 @@ function T:Initialize()
     self.Ready = true
     self.UI:Build()
     self:InitializeComm()
-    SLASH_TONGUES1 = "/tongues"
-    SlashCmdList.TONGUES = function(text) self:Command(text) end
+    BINDING_HEADER_MANYTONGUES = "ManyTongues"
+    BINDING_NAME_MANYTONGUES_TOGGLE_IC = "Toggle IC/OOC speech"
+    BINDING_NAME_MANYTONGUES_NEXT_LANGUAGE = "Next favorite or known language"
+    SLASH_MANYTONGUES1 = "/manytongues"
+    SlashCmdList.MANYTONGUES = function(text) self:Command(text) end
     SLASH_DIALECT1 = "/dialect"
     SlashCmdList.DIALECT = function(text) self:Command("dialect " .. text) end
     SLASH_PETSPEAK1, SLASH_PETSPEAK2 = "/petspeak", "/ps"
@@ -293,10 +353,10 @@ function T:Initialize()
     for _, channel in ipairs({"SAY","YELL","PARTY","PARTY_LEADER","RAID","RAID_LEADER","RAID_WARNING","GUILD","OFFICER","INSTANCE_CHAT","INSTANCE_CHAT_LEADER","WHISPER","WHISPER_INFORM","EMOTE"}) do
         ChatFrameUtil.AddMessageEventFilter("CHAT_MSG_" .. channel, function(...) return self:Receive(...) end)
     end
-    self.Broker = LibStub("LibDataBroker-1.1"):NewDataObject("Tongues", {
+    self.Broker = LibStub("LibDataBroker-1.1"):NewDataObject("ManyTongues", {
         type="data source",text=self.Settings.Character.Language,icon="Interface\\Icons\\Spell_Holy_Silence",
         OnClick=function(_, button) if button == "RightButton" then self.UI:Toggle() else self:CycleLanguage() end end,
-        OnTooltipShow=function(tooltip) tooltip:AddLine("Tongues"); tooltip:AddLine("Left: next language. Right: settings.") end,
+        OnTooltipShow=function(tooltip) tooltip:AddLine("ManyTongues"); tooltip:AddLine("Left: next language. Right: settings.") end,
     })
     self:Refresh()
 end
@@ -306,6 +366,8 @@ T.Frame:RegisterEvent("ADDON_LOADED")
 T.Frame:RegisterEvent("PLAYER_LOGIN")
 T.Frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 T.Frame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED")
+T.Frame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+T.Frame:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
 T.Frame:SetScript("OnEvent", function(_, event, name)
     if event == "PLAYER_LOGIN" then T:Initialize()
     elseif T.Ready then T:Refresh() end
