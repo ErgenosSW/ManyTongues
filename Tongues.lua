@@ -2,7 +2,8 @@
 local addonName = ...
 local T = Tongues
 T.Version = C_AddOns.GetAddOnMetadata(addonName or "Tongues", "Version")
-T.TargetInterface = 120105
+-- Forever uses the modern chat API while reporting a separate interface number.
+T.TargetInterface = select(4, GetBuildInfo())
 
 local defaults = {
     Enabled=true, LanguageLearning=true, ShapeshiftLanguage=true, MMH=false,

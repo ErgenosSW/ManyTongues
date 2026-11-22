@@ -25,6 +25,10 @@ assert len(active) == len(set(active)), "Duplicate script load"
 for path in ROOT.rglob("*.lua"):
     subprocess.run(["luac5.1", "-p", str(path)], check=True)
 print(f"Syntax OK. Manifest: {len(active)} Lua files, exact paths verified.", flush=True)
-subprocess.run(["lua5.1", "tests/run.lua"], cwd=ROOT, check=True)
-for locale in ("deDE", "frFR", "esES", "esMX", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW"):
-    subprocess.run(["lua5.1", "tests/run.lua"], cwd=ROOT, env=dict(os.environ, TONGUES_LOCALE=locale), check=True)
+for client in ("retail", "forever"):
+    print(f"Client profile: {client}", flush=True)
+    environment = dict(os.environ, TONGUES_CLIENT=client)
+    environment.pop("TONGUES_LOCALE", None)
+    subprocess.run(["lua5.1", "tests/run.lua"], cwd=ROOT, env=environment, check=True)
+    for locale in ("deDE", "frFR", "esES", "esMX", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW"):
+        subprocess.run(["lua5.1", "tests/run.lua"], cwd=ROOT, env=dict(environment, TONGUES_LOCALE=locale), check=True)

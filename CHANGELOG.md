@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0 — 2026-11-22
+
+- Restyle the settings and chooser with Blizzard panel tabs, parchment pages and dark ink text.
+- Replace the floating button with a framed spellbook icon and a gold-lettered nameplate, including visible disabled/restricted states.
+- Add WoW Forever 1.60.1 support (Interface 16001, reference build 71037).
+- Keep Retail 12.1.5 support in the same installable package.
+- Read the runtime interface from the client instead of hardcoding Retail.
+- Run the full regression suite and ten additional locales for each client profile.
+- Retain the existing chat protocol, dictionaries and settings schema.
+- Document Forever installation, API provenance and separate client acceptance checks.
+- In-game validation remains pending.
+
 ## 1.0.1 — 2026-10-25
 
 - Target Retail 12.1.5 (Interface 120105), build 70575.

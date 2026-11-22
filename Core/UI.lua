@@ -1,4 +1,4 @@
--- Standalone, scrollable settings window. Uses supported basic frame templates.
+-- Spellbook-inspired window using Blizzard textures, panel tabs and controls.
 local T = Tongues
 local UI = T.UI
 local function label(parent, text, x, y, width, template)
@@ -7,6 +7,11 @@ local function label(parent, text, x, y, width, template)
     font:SetWidth(width or 620)
     font:SetJustifyH("LEFT")
     font:SetText(text)
+    if parent.Parchment then
+        font:SetTextColor(0.08,0.045,0.02,1)
+        font:SetShadowOffset(0,0)
+        font:SetShadowColor(0,0,0,0)
+    end
     return font
 end
 local function button(parent, text, x, y, width, callback)
@@ -16,15 +21,46 @@ local function button(parent, text, x, y, width, callback)
     return b
 end
 local function backdrop(frame)
-    frame:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8",edgeFile="Interface\\Buttons\\WHITE8X8",edgeSize=1})
-    frame:SetBackdropColor(0.045,0.055,0.075,0.98)
-    frame:SetBackdropBorderColor(0.3,0.36,0.43,1)
+    frame:SetBackdrop({bgFile="Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border",tile=true,tileSize=32,edgeSize=24,
+        insets={left=6,right=6,top=6,bottom=6}})
+    frame:SetBackdropColor(1,1,1,1)
+    frame:SetBackdropBorderColor(1,0.9,0.72,1)
+end
+local function parchment(parent, top, bottom)
+    local inset = CreateFrame("Frame",nil,parent,"BackdropTemplate")
+    inset:SetPoint("TOPLEFT",16,-top); inset:SetPoint("BOTTOMRIGHT",-16,bottom)
+    inset:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8",
+        edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",edgeSize=16,
+        insets={left=4,right=4,top=4,bottom=4}})
+    inset:SetBackdropColor(0.83,0.73,0.52,1)
+    inset:SetBackdropBorderColor(0.64,0.48,0.25,1)
+    local paper = inset:CreateTexture(nil,"ARTWORK")
+    paper:SetPoint("TOPLEFT",5,-5); paper:SetPoint("BOTTOMRIGHT",-5,5)
+    if C_Texture and C_Texture.GetAtlasInfo("QuestDetailsBackgrounds") then
+        paper:SetAtlas("QuestDetailsBackgrounds")
+    else
+        paper:SetTexture("Interface\\QuestFrame\\QuestBG")
+        paper:SetTexCoord(0,0.586,0,0.65)
+    end
+    return inset
+end
+local function bookIcon(parent, x, y, size)
+    local icon = parent:CreateTexture(nil,"ARTWORK")
+    icon:SetPoint("TOPLEFT",x,-y); icon:SetSize(size,size)
+    icon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
+    icon:SetTexCoord(0.07,0.93,0.07,0.93)
+    local rim = parent:CreateTexture(nil,"OVERLAY")
+    rim:SetPoint("CENTER",icon,"CENTER",0,0); rim:SetSize(size*1.65,size*1.65)
+    rim:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+    return icon
 end
 local function settings() return T.Settings.Character end
 
 function UI:Check(parent, text, key, group, x, y)
     local control = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     control:SetSize(26,26); control:SetPoint("TOPLEFT", x, -y)
+    control.Parchment = parent.Parchment
     local caption = label(control,text,30,6,group and 240 or 550)
     control:SetScript("OnClick",function(self)
         local values = group and settings()[group] or settings()
@@ -49,8 +85,8 @@ function UI:Slider(parent, text, getter, setter, y)
     local control = CreateFrame("Slider",nil,parent,"OptionsSliderTemplate")
     control:SetPoint("TOPLEFT",18,-y-27); control:SetSize(580,18)
     control:SetMinMaxValues(0,100); control:SetValueStep(1); control:SetObeyStepOnDrag(true)
-    if control.Low then control.Low:SetText("0%") end
-    if control.High then control.High:SetText("100%") end
+    if control.Low then control.Low:SetText("0%"); control.Low:SetTextColor(0.08,0.045,0.02,1); control.Low:SetShadowOffset(0,0); control.Low:SetShadowColor(0,0,0,0) end
+    if control.High then control.High:SetText("100%"); control.High:SetTextColor(0.08,0.045,0.02,1); control.High:SetShadowOffset(0,0); control.High:SetShadowColor(0,0,0,0) end
     control:SetScript("OnValueChanged",function(_, value)
         if self.Refreshing then return end
         setter(math.floor(value+0.5)); T:Refresh()
@@ -78,9 +114,12 @@ function UI:Refresh()
     if not self.Frame or self.Refreshing then return end
     self.Refreshing = true
     for _, refresh in ipairs(self.Controls) do refresh() end
-    self.Mini:SetText("Tongues\n" .. settings().Language)
+    self.Mini.Language:SetText(settings().Language)
+    self.Mini:Paint()
     self.Mini:SetShown(not settings().MMH)
-    self.Status:SetText(T:Restricted() and "Chat restrictions active — speech processing paused" or "Ready · " .. (T.Version or ""))
+    self.Status:SetText(T:Restricted() and "Chat restrictions active — speech processing paused"
+        or not settings().Enabled and "Speech processing disabled"
+        or "ManyTongues " .. (T.Version or "") .. "   |   Speech enabled")
     self.Refreshing = false
 end
 
@@ -97,28 +136,44 @@ end
 
 function UI:Pick(title, values, selected, callback)
     if not self.Picker then
+        -- Keep the entire selector above the main window's scroll children and tabs.
+        local shade = CreateFrame("Frame",nil,self.Frame)
+        shade:SetAllPoints(self.Frame); shade:SetFrameStrata("FULLSCREEN_DIALOG")
+        shade:SetFrameLevel(self.Frame:GetFrameLevel()+100); shade:EnableMouse(true)
+        local dim = shade:CreateTexture(nil,"BACKGROUND")
+        dim:SetAllPoints(shade); dim:SetColorTexture(0,0,0,0.68)
+        shade:Hide(); self.PickerShade=shade
         local picker = CreateFrame("Frame","TonguesSelectionWindow",self.Frame,"BackdropTemplate")
-        picker:SetSize(400,460); picker:SetPoint("CENTER"); picker:SetFrameStrata("DIALOG"); picker:SetClampedToScreen(true)
-        backdrop(picker)
-        picker.Title = label(picker,"",16,16,340,"GameFontNormalLarge")
+        picker:SetSize(400,480); picker:SetPoint("CENTER"); picker:SetFrameStrata("FULLSCREEN_DIALOG"); picker:SetClampedToScreen(true)
+        picker:SetFrameLevel(shade:GetFrameLevel()+10); picker:EnableMouse(true)
+        picker:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8",
+            edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border",edgeSize=24,
+            insets={left=6,right=6,top=6,bottom=6}})
+        picker:SetBackdropColor(0.075,0.055,0.035,1)
+        picker:SetBackdropBorderColor(1,0.85,0.55,1)
+        parchment(picker,82,16)
+        picker.Title = label(picker,"",28,16,328,"GameFontNormalLarge")
         local close = CreateFrame("Button",nil,picker,"UIPanelCloseButton")
         close:SetPoint("TOPRIGHT",-3,-3); close:SetScript("OnClick",function() picker:Hide() end)
         local search = CreateFrame("EditBox",nil,picker,"InputBoxTemplate")
-        search:SetPoint("TOPLEFT",22,-52); search:SetSize(350,26); search:SetAutoFocus(false)
+        search:SetPoint("TOPLEFT",28,-52); search:SetSize(picker:GetWidth()-56,26); search:SetAutoFocus(false)
         search:SetScript("OnEscapePressed",function() picker:Hide() end)
         local scroll = CreateFrame("ScrollFrame",nil,picker,"UIPanelScrollFrameTemplate")
-        scroll:SetPoint("TOPLEFT",16,-94); scroll:SetPoint("BOTTOMRIGHT",-36,16)
-        local content = CreateFrame("Frame",nil,scroll); content:SetSize(344,1); scroll:SetScrollChild(content)
+        -- Inset the rows inside the parchment and reserve a separate scrollbar gutter.
+        scroll:SetPoint("TOPLEFT",28,-100); scroll:SetPoint("BOTTOMRIGHT",-48,28)
+        local content = CreateFrame("Frame",nil,scroll); content:SetSize(picker:GetWidth()-76,1); content.Parchment=true; scroll:SetScrollChild(content)
         picker.Search,picker.Scroll,picker.Content,picker.Buttons = search,scroll,content,{}
         search:SetScript("OnTextChanged",function() self:UpdatePicker() end)
-        picker:SetScript("OnHide",function() search:ClearFocus() end)
+        picker:SetScript("OnHide",function() search:ClearFocus(); shade:Hide() end)
+        shade:SetScript("OnMouseDown",function() picker:Hide() end)
+        self.Frame:HookScript("OnHide",function() picker:Hide() end)
         table.insert(UISpecialFrames,"TonguesSelectionWindow")
         self.Picker = picker
     end
     local p = self.Picker
     p.Values,p.Selected,p.Callback = values,selected,callback
     p.Title:SetText(title); p.Search:SetText(""); p.Scroll:SetVerticalScroll(0)
-    self:UpdatePicker(); p:Show(); p.Search:SetFocus()
+    self:UpdatePicker(); self.PickerShade:Show(); p:Show(); p.Search:SetFocus()
 end
 
 function UI:UpdatePicker()
@@ -130,7 +185,7 @@ function UI:UpdatePicker()
             index = index+1
             local b = p.Buttons[index]
             if not b then
-                b = button(p.Content,"",0,(index-1)*28,340,function(control)
+                b = button(p.Content,"",0,(index-1)*28,p.Content:GetWidth(),function(control)
                     p.Callback(control.Value); p:Hide(); T:Refresh()
                 end)
                 p.Buttons[index] = b
@@ -147,33 +202,39 @@ function UI:Build()
     if self.Frame then return end
     self.Controls = {}
     local frame = CreateFrame("Frame","TonguesMainWindow",UIParent,"BackdropTemplate")
-    frame:SetSize(700,600); frame:SetFrameStrata("DIALOG"); frame:SetClampedToScreen(true)
+    frame:SetSize(700,640); frame:SetFrameStrata("DIALOG"); frame:SetClampedToScreen(true)
     frame:SetMovable(true); frame:EnableMouse(true); frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart",function(f) f:StartMoving() end)
     frame:SetScript("OnDragStop",function(f) f:StopMovingOrSizing(); self:SavePosition(f,"MainMenu") end)
     frame:SetScript("OnShow",function(f)
-        f:SetScale(math.min(1,(UIParent:GetWidth()-30)/700,(UIParent:GetHeight()-30)/600)); self:Refresh()
+        f:SetScale(math.min(1,(UIParent:GetWidth()-30)/700,(UIParent:GetHeight()-30)/640)); self:Refresh()
     end)
     backdrop(frame); self.Frame = frame; self:Place(frame,"MainMenu")
-    label(frame,"Tongues",22,20,600,"GameFontNormalHuge")
-    self.Status = label(frame,"",22,54,640,"GameFontDisableSmall")
+    bookIcon(frame,28,24,40)
+    label(frame,"ManyTongues",86,22,540,"GameFontNormalHuge")
+    label(frame,"Languages, dialects & the art of conversation",86,54,540,"GameFontNormalSmall")
+    self.Status = label(frame,"",26,613,640,"GameFontNormalSmall")
+    parchment(frame,122,42)
     local close = CreateFrame("Button",nil,frame,"UIPanelCloseButton")
     close:SetPoint("TOPRIGHT",-4,-4); close:SetScript("OnClick",function() frame:Hide() end)
     table.insert(UISpecialFrames,"TonguesMainWindow")
     local scroll = CreateFrame("ScrollFrame",nil,frame,"UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT",20,-124); scroll:SetPoint("BOTTOMRIGHT",-40,24)
+    scroll:SetPoint("TOPLEFT",28,-138); scroll:SetPoint("BOTTOMRIGHT",-46,58)
     self.Pages,self.Tabs = {},{}
     for index, name in ipairs({"Speech","Languages","Channels","Translators"}) do
-        local page = CreateFrame("Frame",nil,scroll); page:SetSize(628,550); page:Hide(); self.Pages[index] = page
-        self.Tabs[index] = button(frame,name,20+(index-1)*164,86,154,function()
+        local page = CreateFrame("Frame",nil,scroll); page:SetSize(620,550); page.Parchment=true; page:Hide(); self.Pages[index] = page
+        local tab = CreateFrame("Button",nil,frame,"PanelTopTabButtonTemplate")
+        tab:SetPoint("TOPLEFT",24+(index-1)*162,-88); tab:SetSize(150,32); tab:SetText(name)
+        tab:SetScript("OnClick",function()
             for _, other in ipairs(self.Pages) do other:Hide() end
             scroll:SetScrollChild(page); page:Show(); scroll:SetVerticalScroll(0)
-            for _, tab in ipairs(self.Tabs) do tab:Enable() end
-            self.Tabs[index]:Disable()
+            for _, other in ipairs(self.Tabs) do PanelTemplates_DeselectTab(other) end
+            PanelTemplates_SelectTab(tab)
         end)
+        self.Tabs[index] = tab
     end
     local speech = self.Pages[1]
-    self:Check(speech,"Enable Tongues", "Enabled",nil,12,0)
+    self:Check(speech,"Enable ManyTongues", "Enabled",nil,12,0)
     self:Choice(speech,"Spoken language",function() return T.Language end,function() return settings().Language end,function(v) T:SetLanguage(v) end,42)
     self:Choice(speech,"Dialect",function() return T.Dialect end,function() return settings().Dialect end,function(v) settings().Dialect=v end,82)
     self:Choice(speech,"Speech effect",function() return T.Affect end,function() return settings().Affect end,function(v) settings().Affect=v end,122)
@@ -254,8 +315,34 @@ function UI:Build()
     self.Tabs[1]:Click()
     frame:Hide()
 
-    local mini = CreateFrame("Button","TonguesLanguageButton",UIParent,"UIPanelButtonTemplate")
-    mini:SetSize(130,36); mini:SetClampedToScreen(true); mini:SetMovable(true)
+    -- A book in a quickslot frame beside a carved, gold-lettered nameplate.
+    local mini = CreateFrame("Button","TonguesLanguageButton",UIParent,"BackdropTemplate")
+    mini:SetSize(174,48); mini:SetClampedToScreen(true); mini:SetMovable(true)
+    backdrop(mini)
+    mini.Icon = bookIcon(mini,12,10,28)
+    local brand = mini:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+    brand:SetPoint("TOPLEFT",50,-10); brand:SetText("ManyTongues")
+    mini.Language = mini:CreateFontString(nil,"OVERLAY","GameFontHighlight")
+    mini.Language:SetPoint("TOPLEFT",50,-25); mini.Language:SetWidth(112)
+    mini.Language:SetJustifyH("LEFT"); mini.Language:SetWordWrap(false)
+    local glow = mini:CreateTexture(nil,"HIGHLIGHT")
+    glow:SetTexture("Interface\\Buttons\\UI-Common-MouseHilight")
+    glow:SetPoint("TOPLEFT",8,-7); glow:SetSize(36,36); glow:SetBlendMode("ADD")
+    function mini:Paint()
+        local inactive = not settings().Enabled
+        local restricted = T:Restricted()
+        self.Icon:SetDesaturated(inactive or restricted)
+        brand:SetText(inactive and "Disabled" or restricted and "Chat restricted" or "ManyTongues")
+        local shade = self.Pressed and 0.65 or 1
+        self.Icon:SetVertexColor(shade,shade,shade)
+        self:SetBackdropColor(shade,shade,shade,1)
+        if inactive then self:SetBackdropBorderColor(0.55,0.55,0.55,1)
+        elseif restricted then self:SetBackdropBorderColor(1,0.55,0.18,1)
+        elseif self.Hovered then self:SetBackdropBorderColor(1,0.84,0.4,1)
+        else self:SetBackdropBorderColor(0.9,0.76,0.52,1) end
+    end
+    mini:SetScript("OnMouseDown",function(f) f.Pressed=true; f:Paint() end)
+    mini:SetScript("OnMouseUp",function(f) f.Pressed=nil; f:Paint() end)
     mini:RegisterForClicks("LeftButtonUp","RightButtonUp"); mini:RegisterForDrag("LeftButton")
     mini:SetScript("OnDragStart",function(f) f.Dragged=true; f:StartMoving() end)
     mini:SetScript("OnDragStop",function(f)
@@ -267,17 +354,20 @@ function UI:Build()
         if b=="RightButton" then self:Toggle() else T:CycleLanguage() end
     end)
     mini:SetScript("OnEnter",function(f)
-        GameTooltip:SetOwner(f,"ANCHOR_RIGHT"); GameTooltip:SetText("Tongues")
+        f.Hovered=true; f:Paint()
+        GameTooltip:SetOwner(f,"ANCHOR_RIGHT"); GameTooltip:SetText("ManyTongues")
         GameTooltip:AddLine("Left-click: next language\nRight-click: settings\nDrag: move",1,1,1); GameTooltip:Show()
     end)
-    mini:SetScript("OnLeave",function() GameTooltip:Hide() end)
+    mini:SetScript("OnLeave",function(f)
+        f.Hovered=nil; f.Pressed=nil; f:Paint(); GameTooltip:Hide()
+    end)
     self.Mini=mini; self:Place(mini,"MiniMenu")
     if not settings().UI.MiniMenu.point then mini:ClearAllPoints(); mini:SetPoint("CENTER",UIParent,"CENTER",0,220) end
 
     local panel = CreateFrame("Frame")
-    label(panel,"Tongues",16,16,600,"GameFontNormalLarge")
+    label(panel,"ManyTongues",16,16,600,"GameFontNormalLarge")
     label(panel,"Languages, dialects, effects and translations for roleplay.",16,54,600)
-    button(panel,"Open Tongues settings",16,98,240,function() self.Frame:Show(); self:Refresh() end)
+    button(panel,"Open ManyTongues settings",16,98,240,function() self.Frame:Show(); self:Refresh() end)
     self.Category=Settings.RegisterCanvasLayoutCategory(panel,"Tongues")
     Settings.RegisterAddOnCategory(self.Category)
 end

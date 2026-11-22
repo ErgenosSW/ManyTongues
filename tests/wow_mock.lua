@@ -1,6 +1,13 @@
 -- Deliberately excludes removed globals (SendChatMessage, GetSpellInfo, etc.).
 Mock = {frames={},messages={},wire={},events={},time=100,restricted=false,locale=os.getenv('TONGUES_LOCALE') or 'enUS'}
 local M=Mock
+M.client=os.getenv('TONGUES_CLIENT') or 'retail'
+assert(M.client=='retail' or M.client=='forever', 'Unknown client profile')
+M.interface=M.client=='forever' and 16001 or 120105
+function GetBuildInfo()
+    if M.client=='forever' then return '1.60.1','71037','Nov 20 2026',16001 end
+    return '12.1.5','70575','Oct 13 2026',120105
+end
 local methods={}
 function methods:SetScript(event, fn) self.scripts[event]=fn end
 function methods:HookScript(event, fn)
@@ -41,7 +48,7 @@ function methods:Enable() self.disabled=false end
 function methods:Click(button) if not self.disabled then self:Fire('OnClick',button or 'LeftButton') end end
 function methods:CreateFontString(name) return CreateFrame('FontString',name,self) end
 function methods:CreateTexture(name) return CreateFrame('Texture',name,self) end
-for _,name in ipairs({'SetJustifyH','SetBackdrop','SetBackdropColor','SetBackdropBorderColor','SetMinMaxValues',
+for _,name in ipairs({'SetAllPoints','SetAtlas','SetTexture','SetTexCoord','SetBlendMode','SetDesaturated','SetVertexColor','SetTextColor','SetShadowOffset','SetShadowColor','SetWordWrap','SetColorTexture','SetJustifyH','SetBackdrop','SetBackdropColor','SetBackdropBorderColor','SetMinMaxValues',
     'SetValueStep','SetObeyStepOnDrag','SetFrameStrata','SetClampedToScreen','SetMovable','EnableMouse',
     'RegisterForDrag','StartMoving','StopMovingOrSizing','SetScale','SetAutoFocus','SetFocus','ClearFocus',
     'SetVerticalScroll','SetMaxLetters','RegisterForClicks','SetOwner','AddLine','SetAlpha','SetParent'}) do
@@ -83,7 +90,12 @@ function UnitIsGroupLeader() return false end
 function UnitIsGroupAssistant() return false end
 LE_PARTY_CATEGORY_HOME,LE_PARTY_CATEGORY_INSTANCE=1,2
 ChatTypeInfo={SAY={r=1,g=1,b=1},EMOTE={r=1,g=.5,b=.5}}
-C_AddOns={GetAddOnMetadata=function() return '1.0' end}
+local metadata={}
+for line in io.lines('Tongues.toc') do
+    local key,value=line:match('^## ([^:]+):%s*(.-)%s*$')
+    if key then metadata[key]=value end
+end
+C_AddOns={GetAddOnMetadata=function(_,key) return metadata[key] end}
 C_ChatInfo={InChatMessagingLockdown=function() return M.restricted end,
  SendChatMessage=function(...) table.insert(M.wire,{...}) end,
  SendAddonMessage=function(...) table.insert(M.wire,{...}); return 0 end,
@@ -112,3 +124,10 @@ function xpcall(fn,handler,...)
     local args,n={...},select('#',...)
     return originalXpcall(function() return fn(unpack(args,1,n)) end,handler)
 end
+
+-- Native tab helpers only model interaction; Blizzard renders the tab textures.
+function PanelTemplates_DeselectTab(tab) tab:Enable() end
+function PanelTemplates_SelectTab(tab) tab:Disable() end
+
+function methods:SetFrameLevel(level) self.level=level end
+function methods:GetFrameLevel() return self.level or (self.parent and self.parent:GetFrameLevel()+1 or 0) end

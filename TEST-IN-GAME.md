@@ -1,9 +1,10 @@
-# Retail acceptance checks — not yet executed in WoW
+# Retail and Forever acceptance checks — not yet executed in WoW
 
-Target: 12.1.5 / build 70575 reference. Record the result of `/dump GetBuildInfo()` when testing on another live build. A manifest version alone does not establish API compatibility.
+Targets: Forever 1.60.1 / build 71037 / Interface 16001 and Retail 12.1.5 / build 70575 / Interface 120105. Run the checklist independently in each client. Record the result of `/dump GetBuildInfo()` when testing on another live build. A manifest version alone does not establish API compatibility.
 
 Enable Lua error reporting with `/console scriptErrors 1`, then `/reload`. Use two characters with Tongues for translation checks. Tests should first use the default Blizzard chat and Tongues alone, then the normal addon set.
 
+0. **Client selection:** install the same package into `_forever_/Interface/AddOns/Tongues` or `_retail_/Interface/AddOns/Tongues`. Confirm the addon loads without enabling out-of-date addons. `/dump Tongues.Version, Tongues.TargetInterface` should show `1.1.0` and `16001` in Forever, or `120105` in Retail.
 1. **Startup:** log in with no saved Tongues settings; no Lua error; native languages initialize; `/tongues` and Settings → AddOns → Tongues both open the window.
 2. **Migration:** repeat with a copy of old SavedVariables. Verify language, fluencies, effect, recipients and positions; change values, `/reload`, confirm persistence.
 3. **GUI:** click each tab; scroll every long page; search/select languages and dialects; drag both windows; move sliders to 0/100; add/remove translators; hide/show the floating button; close/reopen with Escape; reset positions; repeat at low resolution and different UI scales. Preview must send no message.
