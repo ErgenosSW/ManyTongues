@@ -72,9 +72,10 @@ function T:RequestLearning(sender,language,fluency)
     if identity(sender)==identity(UnitName("player")) then return end
     local key=identity(sender) .. ":" .. language
     if recent(self.Learning[key]) then return end
-    self.Learning[key]={time=GetTime(),language=language}
     local s=self.Settings.Character
-    self:CommSend(sender,"RL",language,s.Faction,s.Race,s.Class,1,fluency)
+    if self:CommSend(sender,"RL",language,s.Faction,s.Race,s.Class,1,fluency) then
+        self.Learning[key]={time=GetTime(),language=language}
+    end
 end
 
 function T:FindSpeech(language,wire,kind,event,sender)

@@ -254,6 +254,9 @@ function T:AnimalSpeak(kind, text)
         self:Print("Switch to IC to speak as a pet or mount."); return
     end
     if not self.Ready or self:Restricted() then self:Print("Speech is unavailable while chat is restricted."); return end
+    if not self.Settings.Character.Enabled then
+        self:Print("Enable ManyTongues to speak as a pet or mount."); return
+    end
     if text == "" then self:Print("Enter text after /petspeak or /mountspeak."); return end
     local name, language, verb
     local s = self.Settings.Character

@@ -4,7 +4,7 @@ Targets: Forever 1.60.1 / build 71037 / Interface 16001 and Retail 12.1.5 / buil
 
 Enable Lua error reporting with `/console scriptErrors 1`, then `/reload`. Use two characters with ManyTongues for translation checks. Tests should first use the default Blizzard chat and ManyTongues alone, then the normal addon set.
 
-0. **Client selection:** install the same package into `_forever_/Interface/AddOns/Tongues` or `_retail_/Interface/AddOns/Tongues`. Confirm the addon loads without enabling out-of-date addons. `/dump ManyTongues.Version, ManyTongues.TargetInterface` should show `1.2.0` and `16001` in Forever, or `120105` in Retail.
+0. **Client selection:** install the same package into `_forever_/Interface/AddOns/Tongues` or `_retail_/Interface/AddOns/Tongues`. Confirm the addon loads without enabling out-of-date addons. `/dump ManyTongues.Version, ManyTongues.TargetInterface` should show `1.2.1` and `16001` in Forever, or `120105` in Retail.
 1. **Startup:** log in with no saved ManyTongues settings; no Lua error; native languages initialize; `/manytongues` and Settings → AddOns → ManyTongues both open the window.
 2. **Migration:** repeat with a copy of old SavedVariables. Verify language, fluencies, effect, recipients and positions; change values, `/reload`, confirm persistence.
 3. **GUI:** click each tab; scroll every long page; search/select languages and dialects; drag both windows; move sliders to 0/100; add/remove translators; hide/show the floating button; close/reopen with Escape; reset positions; repeat at low resolution and different UI scales. Preview must send no message.
@@ -26,3 +26,8 @@ For any failure, save the full Lua error (including stack), the reproduction ste
 14. **Translation burst:** with two current clients, send several different tagged-language lines, repeated identical lines, and pet/mount speech; verify each readable translation belongs to its original line and window. Repeat with an old peer; ambiguous tokenless replies may be omitted, but original chat must remain. Native server-scrambled speech still has the documented matching limitation.
 15. **Diagnostics:** run /manytongues doctor before/after receiving translations and after a no-peer timeout. Verify local counts and restriction indicators; no message contents or recipient names are included in the report.
 16. **Layout:** check IC/OOC and druid controls near screen edges, language-list favorite controls, long localized names and hover states at different UI scales.
+
+## 1.2.1 fixes (pending in the actual clients)
+
+17. **Disabled animal speech:** turn off Enable ManyTongues while in IC, then run /ps and /ms with an active pet/mount. Confirm a local explanation appears and no emote is sent. Enable the addon again and confirm both commands work normally. Repeat in OOC and under chat restrictions.
+18. **Learning retry:** with two compatible clients, set fluency below 100 and enable gradual learning. If outgoing addon communication is temporarily blocked, the failed attempt must not consume the 20-second learning-request cooldown. Confirm a new eligible message can request learning once communication is available again. Normal cooldown and one-reply consumption must still apply.

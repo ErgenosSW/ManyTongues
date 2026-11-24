@@ -1,6 +1,6 @@
 ## Interface: 120105, 16001
 ## Title: ManyTongues
-## Version: 1.2.0
+## Version: 1.2.1
 ## Notes: Roleplay languages, dialects, speech effects and translations.
 ## Author: ErgenosSW
 ## SavedVariables: Tongues_Global

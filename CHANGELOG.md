@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1 - 2026-11-24
+
+- Respect the master Enable setting for /ps, /petspeak, /ms and /mountspeak; disabled pet/mount commands no longer send chat or add translation history.
+- Cache language-learning requests only after addon communication accepts them, allowing an immediate retry when a blocked request was not sent.
+- Add regression tests reproducing both failures; 46 tests pass for each client profile.
+- Retain Retail 12.1.5 (Interface 120105) and Forever 1.60.1 (16001) support.
+- In-game acceptance checks remain pending.
+
 ## 1.2.0 — 2026-11-23
 
 - Queue translation requests individually and validate out-of-order replies by token, sender, channel, frame, language and speech kind.

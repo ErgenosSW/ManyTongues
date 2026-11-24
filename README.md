@@ -8,7 +8,7 @@ ManyTongues is a roleplay addon for **WoW Retail 12.1.5 and WoW Forever 1.60.1**
 
 ## Install
 
-1. Download `ManyTongues-1.2.0.zip` from the [latest release](https://github.com/ErgenosSW/ManyTongues/releases/latest) and extract it.
+1. Download `ManyTongues-1.2.1.zip` from the [latest release](https://github.com/ErgenosSW/ManyTongues/releases/latest) and extract it.
 2. Put the extracted **Tongues** folder in `_forever_/Interface/AddOns/` for Forever, or `_retail_/Interface/AddOns/` for Retail. The same ZIP supports both clients.
 3. Enable **ManyTongues** in the addon list and type `/manytongues` in game.
 

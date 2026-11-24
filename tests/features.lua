@@ -214,5 +214,30 @@ test('actual keyboard binding bodies toggle mode and cycle favorites',function()
     bodies.MANYTONGUES_TOGGLE_IC(); assert(s.InCharacter)
     T:SetFavorite('Draconic',true); bodies.MANYTONGUES_NEXT_LANGUAGE(); eq(s.Language,'Draconic')
 end)
+test('blocked learning requests do not suppress the next retry',function()
+    local s=reset(); s.LanguageLearning=true
+    local original,attempts=T.CommSend,0
+    local ok,err=pcall(function()
+        T.CommSend=function() attempts=attempts+1; return false end
+        T:RequestLearning('LearningPeer','Draconic',50)
+        eq(T.Learning['learningpeer-realm:Draconic'],nil)
+        T.CommSend=function() attempts=attempts+1; return true end
+        T:RequestLearning('LearningPeer','Draconic',50)
+        eq(attempts,2)
+        assert(T.Learning['learningpeer-realm:Draconic'])
+        T:RequestLearning('LearningPeer','Draconic',50)
+        eq(attempts,2)
+    end)
+    T.CommSend=original
+    if not ok then error(err) end
+end)
+test('disabled addon blocks both pet and mount speech commands',function()
+    local s=reset(); s.Enabled=false; M.pet='Kitty'; M.mount='Horse'
+    local sent,history=#M.wire,#T.History
+    SlashCmdList.PETSPEAK('Do not send this')
+    SlashCmdList.MOUNTSPEAK('Do not send this either')
+    eq(#M.wire,sent); eq(#T.History,history)
+    M.pet=nil; M.mount=nil
+end)
 reset()
 end
